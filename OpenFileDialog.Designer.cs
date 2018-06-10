@@ -34,6 +34,7 @@
 			this.Project = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
 			this.Path = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
 			this.panel2 = new System.Windows.Forms.Panel();
+			this.Options_Button = new System.Windows.Forms.Button();
 			this.pictureBox1 = new System.Windows.Forms.PictureBox();
 			this.FileComboBox = new System.Windows.Forms.ComboBox();
 			this.OK_Button = new System.Windows.Forms.Button();
@@ -69,6 +70,7 @@
 			this.FileListView.TabIndex = 0;
 			this.FileListView.UseCompatibleStateImageBehavior = false;
 			this.FileListView.View = System.Windows.Forms.View.Details;
+			this.FileListView.ColumnClick += new System.Windows.Forms.ColumnClickEventHandler(this.FileListView_ColumnClick);
 			this.FileListView.MouseDoubleClick += new System.Windows.Forms.MouseEventHandler(this.FileListView_MouseDoubleClick);
 			// 
 			// File
@@ -88,6 +90,7 @@
 			// 
 			// panel2
 			// 
+			this.panel2.Controls.Add(this.Options_Button);
 			this.panel2.Controls.Add(this.pictureBox1);
 			this.panel2.Controls.Add(this.FileComboBox);
 			this.panel2.Controls.Add(this.OK_Button);
@@ -97,10 +100,23 @@
 			this.panel2.Name = "panel2";
 			this.panel2.Size = new System.Drawing.Size(764, 98);
 			this.panel2.TabIndex = 5;
+			this.panel2.Move += new System.EventHandler(this.OpenFileDialog_Move);
+			this.panel2.Resize += new System.EventHandler(this.OpenFileDialog_Resize);
+			// 
+			// Options_Button
+			// 
+			this.Options_Button.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+			this.Options_Button.Location = new System.Drawing.Point(673, 55);
+			this.Options_Button.Name = "Options_Button";
+			this.Options_Button.Size = new System.Drawing.Size(79, 31);
+			this.Options_Button.TabIndex = 4;
+			this.Options_Button.Text = "Options";
+			this.Options_Button.UseVisualStyleBackColor = true;
+			this.Options_Button.Click += new System.EventHandler(this.OptionsButton_Click);
 			// 
 			// pictureBox1
 			// 
-			this.pictureBox1.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
+			this.pictureBox1.Anchor = System.Windows.Forms.AnchorStyles.Top;
 			this.pictureBox1.Location = new System.Drawing.Point(668, 7);
 			this.pictureBox1.Name = "pictureBox1";
 			this.pictureBox1.Size = new System.Drawing.Size(24, 24);
@@ -148,11 +164,13 @@
 			this.ClientSize = new System.Drawing.Size(764, 321);
 			this.Controls.Add(this.panel1);
 			this.Controls.Add(this.panel2);
-			this.MinimumSize = new System.Drawing.Size(580, 250);
+			this.MinimumSize = new System.Drawing.Size(680, 250);
 			this.Name = "OpenFileDialog";
 			this.Text = "Open File By Name";
 			this.Shown += new System.EventHandler(this.OpenFile_Shown);
 			this.SizeChanged += new System.EventHandler(this.OpenFile_SizeChanged);
+			this.Move += new System.EventHandler(this.OpenFileDialog_Move);
+			this.Resize += new System.EventHandler(this.OpenFileDialog_Resize);
 			this.panel1.ResumeLayout(false);
 			this.panel2.ResumeLayout(false);
 			((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
@@ -172,5 +190,6 @@
 		private System.Windows.Forms.Panel panel1;
 		private System.Windows.Forms.Panel panel2;
 		private System.Windows.Forms.PictureBox pictureBox1;
+		private System.Windows.Forms.Button Options_Button;
 	}
 }

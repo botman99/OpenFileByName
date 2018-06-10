@@ -1,23 +1,17 @@
-﻿//------------------------------------------------------------------------------
-// <copyright file="OpenFileCustomCommandPackage.cs" company="Jeffrey Broome">
-//     Copyright (c) Company.  All rights reserved.
-// </copyright>
-//------------------------------------------------------------------------------
+﻿//
+// Copyright (c) 2018 Jeffrey Broome.
+//
 
 using System;
-using System.ComponentModel.Design;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio;
-using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
-using Microsoft.Win32;
 
 using EnvDTE;
 using EnvDTE80;
+using System.Collections.Generic;
 
 namespace OpenFileByName
 {
@@ -42,10 +36,11 @@ namespace OpenFileByName
 	[InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)] // Info on this package for Help/About
 	[ProvideMenuResource("Menus.ctmenu", 1)]
 	[Guid(OpenFileCustomCommandPackage.PackageGuidString)]
-	[ProvideAutoLoad(VSConstants.UICONTEXT.NoSolution_string)]
-	[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string)]
-	[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasMultipleProjects_string)]
-	[ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasSingleProject_string)]	[SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
+	[ProvideAutoLoad(UIContextGuids80.NoSolution)]
+	[ProvideAutoLoad(UIContextGuids80.SolutionExists)]
+	[ProvideAutoLoad(UIContextGuids80.SolutionHasMultipleProjects)]
+	[ProvideAutoLoad(UIContextGuids80.SolutionHasSingleProject)]
+	[SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
 	public sealed class OpenFileCustomCommandPackage : Package, IVsSolutionEvents, IVsSolutionLoadEvents
 	{
 		/// <summary>
@@ -56,11 +51,31 @@ namespace OpenFileByName
 		private IVsSolution2 solution = null;
 		private uint solutionEventsCookie = 0;
 
+		private System.Threading.Thread BuildProjectFilenamesThread = null;
+
 		public static bool bIsUpdatingSolutionFiles = false;
-		public static bool bHasSolutionChanged = false;
 
 		private SolutionEvents solutionEvents;
 		private ProjectItemsEvents projectItemsEvents;
+
+		public class FilenameData
+		{
+			public string name;
+			public string filename;
+		}
+
+		public class ProjectFileNameData
+		{
+			// we need to use actual Project and not "Project.Name" string here, so that when we display the Project in the FindFile Dialog it will be
+			// the correct project name even after the project is renamed (ProjectRenamed event doesn't get called for VC projects)
+			public Project project;
+			public List<FilenameData> filenames;
+		}
+
+		public static List<ProjectFileNameData> ProjectFilenames = null;
+
+		public static Object ProjectFilenamesLock = new object();
+
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="OpenFileCustomCommand"/> class.
@@ -75,25 +90,28 @@ namespace OpenFileByName
 
 		#region Package Members
 
+
 		// IVsSolutionEvents interface
 		public int OnAfterCloseSolution(object pUnkReserved)
 		{
-			bHasSolutionChanged = true;
+			if (BuildProjectFilenamesThread != null)
+			{
+				BuildProjectFilenamesThread.Abort();
+				BuildProjectFilenamesThread.Join();
+
+				BuildProjectFilenamesThread = null;
+			}
 
 			return VSConstants.S_OK;
 		}
 
 		public int OnAfterLoadProject(IVsHierarchy pStubHierarchy, IVsHierarchy pRealHierarchy)
 		{
-			bHasSolutionChanged = true;
-
 			return VSConstants.S_OK;
 		}
 
 		public int OnAfterOpenProject(IVsHierarchy pHierarchy, int fAdded)
 		{
-			bHasSolutionChanged = true;
-
 			return VSConstants.S_OK;
 		}
 
@@ -101,7 +119,6 @@ namespace OpenFileByName
 		{
 			// when a new solution is opened, set the flag to indicate that we are still processing the solution projects
 			bIsUpdatingSolutionFiles = true;
-			bHasSolutionChanged = true;
 
 			return VSConstants.S_OK;
 		}
@@ -161,20 +178,25 @@ namespace OpenFileByName
 
 		public int OnAfterLoadProjectBatch(bool fIsBackgroundIdleBatch)
 		{
-			bHasSolutionChanged = true;
-
 			return VSConstants.S_OK;
 		}
 
 		public int OnAfterBackgroundSolutionLoadComplete()
 		{
-			// once the solution has been fully loaded, clear the flag to indicate that we are no longer processing the solution projects
-			bIsUpdatingSolutionFiles = false;
-			bHasSolutionChanged = true;
+			if (BuildProjectFilenamesThread != null)
+			{
+				BuildProjectFilenamesThread.Abort();
+				BuildProjectFilenamesThread.Join();
+
+				BuildProjectFilenamesThread = null;
+			}
+
+			BuildProjectFilenamesThread = new System.Threading.Thread(new BuildProjectFilenames().Run);
+			BuildProjectFilenamesThread.Priority = System.Threading.ThreadPriority.Normal;
+			BuildProjectFilenamesThread.Start();  // start the thread running
 
 			return VSConstants.S_OK;
 		}
-
 
 		/// <summary>
 		/// Initialization of the package; this method is called right after the package is sited, so this is the place
@@ -238,33 +260,255 @@ namespace OpenFileByName
 
 		private void SolutionEvents_ProjectAdded(Project project)
 		{
-			bHasSolutionChanged = true;
+			lock (ProjectFilenamesLock)
+			{
+				try
+				{
+					// add the new project to the project filenames list
+					OpenFileCustomCommandPackage.ProjectFileNameData projectFilename = new OpenFileCustomCommandPackage.ProjectFileNameData();
+					projectFilename.project = project;
+					projectFilename.filenames = new List<OpenFileCustomCommandPackage.FilenameData>();
+					projectFilename.filenames.AddRange(OpenFileCustomCommandPackage.GetProjectFilenames(project));
+
+					OpenFileCustomCommandPackage.ProjectFilenames.Add(projectFilename);
+				}
+				catch
+				{
+				}
+			}
 		}
 
 		private void SolutionEvents_ProjectRemoved(Project project)
 		{
-			bHasSolutionChanged = true;
+			lock (ProjectFilenamesLock)
+			{
+				try
+				{
+					// remove the project from the project filenames list
+					for (int index = 0; index < ProjectFilenames.Count; ++index)
+					{
+						if (ProjectFilenames[index].project.Name == project.Name)
+						{
+							ProjectFilenames.RemoveAt(index);
+						}
+					}
+				}
+				catch
+				{
+				}
+			}
 		}
 
 		private void SolutionEvents_ProjectRenamed(Project project, string oldName)
 		{
 			// WARNING!!! - This does NOT get called when a VC project is renamed (but does get called when a C# project is renamed)
-			bHasSolutionChanged = true;
+
+			lock (ProjectFilenamesLock)
+			{
+				try
+				{
+					// rename the project in the profect filenames list
+					for (int index = 0; index < ProjectFilenames.Count; ++index)
+					{
+						if (ProjectFilenames[index].project.Name == oldName)
+						{
+							ProjectFilenames[index].project = project;
+						}
+					}
+				}
+				catch
+				{
+				}
+			}
 		}
 
 		private void ProjectItemsEvents_ItemAdded(ProjectItem projectItem)
 		{
-			bHasSolutionChanged = true;
+			lock (ProjectFilenamesLock)
+			{
+				try
+				{
+					string projectName = projectItem.ContainingProject.Name;
+
+					if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
+					{
+						for (int projectIndex = 0; projectIndex < ProjectFilenames.Count; ++projectIndex)
+						{
+							if (ProjectFilenames[projectIndex].project.Name == projectName)
+							{
+								FilenameData filenameData = new FilenameData();
+								filenameData.name = projectItem.Name;
+								filenameData.filename = projectItem.get_FileNames(0);
+
+								ProjectFilenames[projectIndex].filenames.Add(filenameData);
+
+								break;
+							}
+						}
+					}
+				}
+				catch
+				{
+				}
+			}
 		}
 
 		private void ProjectItemsEvents_ItemRemoved(ProjectItem projectItem)
 		{
-			bHasSolutionChanged = true;
+			lock (ProjectFilenamesLock)
+			{
+				try
+				{
+					string projectName = projectItem.ContainingProject.Name;
+
+					if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
+					{
+						string projectItemFilename = projectItem.get_FileNames(0);
+						bool bDone = false;
+
+						for (int projectIndex = 0; !bDone && (projectIndex < ProjectFilenames.Count); ++projectIndex)
+						{
+							if (ProjectFilenames[projectIndex].project.Name == projectName)
+							{
+								for (int itemIndex = 0; !bDone && (itemIndex < ProjectFilenames[projectIndex].filenames.Count); ++itemIndex)
+								{
+									if (ProjectFilenames[projectIndex].filenames[itemIndex].filename == projectItemFilename)
+									{
+										ProjectFilenames[projectIndex].filenames.RemoveAt(itemIndex);
+										bDone = true;  // break out of both loops
+									}
+								}
+							}
+						}
+					}
+				}
+				catch
+				{
+				}
+			}
 		}
 
 		private void ProjectItemsEvents_ItemRenamed(ProjectItem projectItem, string oldName)
 		{
-			bHasSolutionChanged = true;
+			lock (ProjectFilenamesLock)
+			{
+				try
+				{
+					string projectName = projectItem.ContainingProject.Name;
+
+					if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
+					{
+						string projectItemFilename = projectItem.get_FileNames(0);
+						bool bDone = false;
+
+						for (int projectIndex = 0; !bDone && (projectIndex < ProjectFilenames.Count); ++projectIndex)
+						{
+							if (ProjectFilenames[projectIndex].project.Name == projectName)
+							{
+								for (int itemIndex = 0; !bDone && (itemIndex < ProjectFilenames[projectIndex].filenames.Count); ++itemIndex)
+								{
+									if (ProjectFilenames[projectIndex].filenames[itemIndex].name == oldName)
+									{
+										ProjectFilenames[projectIndex].filenames[itemIndex].name = projectItem.Name;
+										ProjectFilenames[projectIndex].filenames[itemIndex].filename = projectItem.get_FileNames(0);
+
+										bDone = true;  // break out of both loops
+									}
+								}
+							}
+						}
+					}
+				}
+				catch
+				{
+				}
+			}
+		}
+
+
+		public static IEnumerable<FilenameData> GetProjectItemFilenames(ProjectItem projectItem)
+		{
+			List<FilenameData> list = new List<FilenameData>();
+
+			if (projectItem == null)
+			{
+				return list;
+			}
+
+			try
+			{
+				if (projectItem.SubProject != null)  // i.e. Kind == vsProjectItemKindSubProject
+				{
+					list.AddRange(GetProjectFilenames(projectItem.SubProject));
+				}
+				else if ((projectItem.ProjectItems != null) && (projectItem.ProjectItems.Count != 0))  // i.e. Kind == vsProjectItemKindVirtualFolder
+				{
+					foreach (ProjectItem childProjectItem in projectItem.ProjectItems)
+					{
+						list.AddRange(GetProjectItemFilenames(childProjectItem));
+					}
+				}
+				else if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
+				{
+					if ((!projectItem.Name.EndsWith(".vcxproj.filters")) &&
+						(!projectItem.Name.EndsWith(".vcxproj.user")) &&
+						(!projectItem.Name.EndsWith(".csproj.user")))
+					{
+						FilenameData filenameData = new FilenameData();
+						filenameData.name = projectItem.Name;
+						filenameData.filename = projectItem.get_FileNames(0);
+
+						list.Add(filenameData);
+					}
+				}
+			}
+			catch
+			{
+			}
+
+			return list;
+		}
+
+		public static IEnumerable<FilenameData> GetProjectFilenames(Project project)
+		{
+			List<FilenameData> list = new List<FilenameData>();
+
+			if (project == null)
+			{
+				return list;
+			}
+
+			try
+			{
+				foreach (ProjectItem projectItem in project.ProjectItems)
+				{
+					if (projectItem != null)
+					{
+						if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
+						{
+							if ((!projectItem.Name.EndsWith(".vcxproj.filters")) &&
+								(!projectItem.Name.EndsWith(".vcxproj.user")) &&
+								(!projectItem.Name.EndsWith(".csproj.user")))
+							{
+								FilenameData filenameData = new FilenameData();
+								filenameData.name = projectItem.Name;
+								filenameData.filename = projectItem.get_FileNames(0);
+
+								list.Add(filenameData);
+							}
+						}
+						else
+						{
+							list.AddRange(GetProjectItemFilenames(projectItem));
+						}
+					}
+				}
+			}
+			catch
+			{
+			}
+
+			return list;
 		}
 
 		#endregion

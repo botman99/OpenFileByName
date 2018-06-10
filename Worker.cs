@@ -1,8 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿//
+// Copyright (c) 2018 Jeffrey Broome.
+//
+
+using System;
 
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -28,18 +28,18 @@ namespace OpenFileByName
 		{
 			try
 			{
-				for (int projectIndex = 0; projectIndex < OpenFileCustomCommand.ProjectFilenames.Count; ++projectIndex)
+				for (int projectIndex = 0; projectIndex < OpenFileCustomCommandPackage.ProjectFilenames.Count; ++projectIndex)
 				{
 					try
 					{
-						for( int filenameIndex = 0; filenameIndex < OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.Count; ++filenameIndex)
+						for( int filenameIndex = 0; filenameIndex < OpenFileCustomCommandPackage.ProjectFilenames[projectIndex].filenames.Count; ++filenameIndex)
 						{
-							if ((Input == "") || OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[filenameIndex].name.IndexOf(Input, StringComparison.CurrentCultureIgnoreCase) >= 0)
+							if ((Input == "") || OpenFileCustomCommandPackage.ProjectFilenames[projectIndex].filenames[filenameIndex].name.IndexOf(Input, StringComparison.CurrentCultureIgnoreCase) >= 0)
 							{
-								ListViewItem item = new ListViewItem(OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[filenameIndex].name);
+								ListViewItem item = new ListViewItem(OpenFileCustomCommandPackage.ProjectFilenames[projectIndex].filenames[filenameIndex].name);
 
-								item.SubItems.Add(OpenFileCustomCommand.ProjectFilenames[projectIndex].project.Name);
-								item.SubItems.Add(OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[filenameIndex].filename);
+								item.SubItems.Add(OpenFileCustomCommandPackage.ProjectFilenames[projectIndex].project.Name);
+								item.SubItems.Add(OpenFileCustomCommandPackage.ProjectFilenames[projectIndex].filenames[filenameIndex].filename);
 
 								OpenFileDialog.items.Add(item);
 							}

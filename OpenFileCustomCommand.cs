@@ -1,8 +1,6 @@
-﻿//------------------------------------------------------------------------------
-// <copyright file="OpenFileCustomCommand.cs" company="Jeffrey Broome">
-//     Copyright (c) Company.  All rights reserved.
-// </copyright>
-//------------------------------------------------------------------------------
+﻿//
+// Copyright (c) 2018 Jeffrey Broome.
+//
 
 using System;
 using System.ComponentModel.Design;
@@ -12,7 +10,7 @@ using Microsoft.VisualStudio.Shell.Interop;
 
 using EnvDTE;
 using EnvDTE80;
-using System.Collections.Generic;
+using System.Windows.Forms;
 
 namespace OpenFileByName
 {
@@ -36,21 +34,7 @@ namespace OpenFileByName
 		/// </summary>
 		private readonly Package package;
 
-		public class FilenameData
-		{
-			public string name;
-			public string filename;
-		}
-
-		public class ProjectFileNameData
-		{
-			// we need to use actual Project and not "Project.Name" string here, so that when we display the Project in the FindFile Dialog it will be
-			// the correct project name even after the project is renamed (ProjectRenamed event doesn't get called for VC projects)
-			public Project project;
-			public List<FilenameData> filenames;
-		}
-
-		public static List<ProjectFileNameData> ProjectFilenames = null;
+		private string input = "";
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="OpenFileCustomCommand"/> class.
@@ -124,116 +108,28 @@ namespace OpenFileByName
 				return;
 			}
 
-			DTE2 dte2 = Package.GetGlobalService(typeof(DTE)) as DTE2;
-			if (dte2 != null)
+			if (Properties.Settings.Default.UseSelectedText)
 			{
-				if (OpenFileCustomCommandPackage.bHasSolutionChanged || (ProjectFilenames == null))  // build the list of project filesnames (if needed)
+				DTE2 dte2 = Package.GetGlobalService(typeof(DTE)) as DTE2;
+				if (dte2.ActiveDocument != null)
 				{
-					ProjectFilenames = new List<ProjectFileNameData>();
+					TextSelection selection = dte2.ActiveDocument.Selection as TextSelection;
 
-					Solution solution = dte2.Solution;
-
-					foreach (Project project in solution.Projects)
+					if ((selection != null) && (selection.Text != "") && (selection.Text.Length < 260))  // 260 is MAX_PATH
 					{
-						// add each project to the project filenames list
-						ProjectFileNameData projectFilename = new ProjectFileNameData();
-						projectFilename.project = project;
-						projectFilename.filenames = new List<FilenameData>();
-						projectFilename.filenames.AddRange(GetProjectFilenames(project));
-
-						ProjectFilenames.Add(projectFilename);
+						input = selection.Text;
 					}
 				}
 			}
 
-			OpenFileDialog openFileDialog = new OpenFileByName.OpenFileDialog();
+			OpenFileDialog openFileDialog = new OpenFileByName.OpenFileDialog(input);
 
 			openFileDialog.ShowDialog();
-		}
 
-		public static IEnumerable<FilenameData> GetProjectItemFilenames(ProjectItem projectItem)
-		{
-			List<FilenameData> list = new List<FilenameData>();
-
-			if (projectItem == null)
+			if (openFileDialog.DialogResult == DialogResult.OK)
 			{
-				return list;
+				input = openFileDialog.input;
 			}
-
-			try
-			{
-				if (projectItem.SubProject != null)  // i.e. Kind == vsProjectItemKindSubProject
-				{
-					list.AddRange(GetProjectFilenames(projectItem.SubProject));
-				}
-				else if ((projectItem.ProjectItems != null) && (projectItem.ProjectItems.Count != 0))  // i.e. Kind == vsProjectItemKindVirtualFolder
-				{
-					foreach (ProjectItem childProjectItem in projectItem.ProjectItems)
-					{
-						list.AddRange(GetProjectItemFilenames(childProjectItem));
-					}
-				}
-				else if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
-				{
-					if ((!projectItem.Name.EndsWith(".vcxproj.filters")) &&
-						(!projectItem.Name.EndsWith(".vcxproj.user")) &&
-						(!projectItem.Name.EndsWith(".csproj.user")))
-					{
-						FilenameData filenameData = new FilenameData();
-						filenameData.name = projectItem.Name;
-						filenameData.filename = projectItem.get_FileNames(0);
-
-						list.Add(filenameData);
-					}
-				}
-			}
-			catch
-			{
-			}
-
-			return list;
-		}
-
-		public static IEnumerable<FilenameData> GetProjectFilenames(Project project)
-		{
-			List<FilenameData> list = new List<FilenameData>();
-
-			if (project == null)
-			{
-				return list;
-			}
-
-			try
-			{
-				foreach (ProjectItem projectItem in project.ProjectItems)
-				{
-					if (projectItem != null)
-					{
-						if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
-						{
-							if ((!projectItem.Name.EndsWith(".vcxproj.filters")) &&
-								(!projectItem.Name.EndsWith(".vcxproj.user")) &&
-								(!projectItem.Name.EndsWith(".csproj.user")))
-							{
-								FilenameData filenameData = new FilenameData();
-								filenameData.name = projectItem.Name;
-								filenameData.filename = projectItem.get_FileNames(0);
-
-								list.Add(filenameData);
-							}
-						}
-						else
-						{
-							list.AddRange(GetProjectItemFilenames(projectItem));
-						}
-					}
-				}
-			}
-			catch
-			{
-			}
-
-			return list;
 		}
 	}
 }

@@ -8,9 +8,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("OpenFileByName")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Jeffrey Broome")]
 [assembly: AssemblyProduct("OpenFileByName")]
-[assembly: AssemblyCopyright("")]
+[assembly: AssemblyCopyright("Jeffrey Broome")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
