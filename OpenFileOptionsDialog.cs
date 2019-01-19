@@ -37,5 +37,14 @@ namespace OpenFileByName
 
 			Properties.Settings.Default.Save();
 		}
+
+		private void OpenFileOptionsDialog_KeyDown(object sender, KeyEventArgs e)
+		{
+			if( e.KeyCode == Keys.Escape )
+			{
+				DialogResult = DialogResult.OK;
+				Close();
+			}
+		}
 	}
 }

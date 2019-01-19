@@ -164,11 +164,13 @@
 			this.ClientSize = new System.Drawing.Size(764, 321);
 			this.Controls.Add(this.panel1);
 			this.Controls.Add(this.panel2);
+			this.KeyPreview = true;
 			this.MinimumSize = new System.Drawing.Size(680, 250);
 			this.Name = "OpenFileDialog";
 			this.Text = "Open File By Name";
 			this.Shown += new System.EventHandler(this.OpenFile_Shown);
 			this.SizeChanged += new System.EventHandler(this.OpenFile_SizeChanged);
+			this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.OpenFileDialog_KeyDown);
 			this.Move += new System.EventHandler(this.OpenFileDialog_Move);
 			this.Resize += new System.EventHandler(this.OpenFileDialog_Resize);
 			this.panel1.ResumeLayout(false);

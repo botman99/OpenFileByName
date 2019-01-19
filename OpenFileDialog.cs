@@ -326,5 +326,19 @@ namespace OpenFileByName
 
 			openFileOptionsDialog.ShowDialog(this);
 		}
+
+		private void OpenFileDialog_KeyDown(object sender, KeyEventArgs e)
+		{
+			if( e.KeyCode == Keys.Escape )
+			{
+				if (WorkerThread != null)  // if there's already a worker thread running, kill it
+				{
+					WorkerThread.Abort();
+				}
+
+				DialogResult = DialogResult.Cancel;
+				Close();
+			}
+		}
 	}
 }

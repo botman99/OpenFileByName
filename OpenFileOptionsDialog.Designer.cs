@@ -74,11 +74,13 @@
 			this.Controls.Add(this.OKButton);
 			this.Controls.Add(this.UseSelectedText_Checkbox);
 			this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+			this.KeyPreview = true;
 			this.MaximizeBox = false;
 			this.MinimizeBox = false;
 			this.Name = "OpenFileOptionsDialog";
 			this.Text = "Open File By Name - Options";
 			this.Shown += new System.EventHandler(this.OpenFileOptions_Shown);
+			this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.OpenFileOptionsDialog_KeyDown);
 			this.ResumeLayout(false);
 			this.PerformLayout();
 
