@@ -1,9 +1,13 @@
-﻿using System;
+﻿//
+// Copyright 2020 - Jeffrey "botman" Broome
+//
+
+using System;
 using System.Windows.Forms;
 
 namespace OpenFileByName
 {
-	public partial class OpenFileOptionsDialog : Form
+	public partial class OpenFileOptionsDialog:Form
 	{
 		public OpenFileOptionsDialog()
 		{

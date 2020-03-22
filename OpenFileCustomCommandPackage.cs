@@ -1,9 +1,8 @@
 ﻿//
-// Copyright (c) 2018 Jeffrey Broome.
+// Copyright 2020 - Jeffrey "botman" Broome
 //
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
@@ -11,7 +10,6 @@ using Microsoft.VisualStudio.Shell.Interop;
 
 using EnvDTE;
 using EnvDTE80;
-using System.Collections.Generic;
 
 namespace OpenFileByName
 {
@@ -33,15 +31,10 @@ namespace OpenFileByName
 	/// </para>
 	/// </remarks>
 	[PackageRegistration(UseManagedResourcesOnly = true)]
-	[InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)] // Info on this package for Help/About
+	[InstalledProductRegistration("OpenFileByName","Opens a file in the solution by filename","1.0",IconResourceID = 400)] // Info on this package for Help/About
 	[ProvideMenuResource("Menus.ctmenu", 1)]
 	[Guid(OpenFileCustomCommandPackage.PackageGuidString)]
-	[ProvideAutoLoad(UIContextGuids80.NoSolution)]
-	[ProvideAutoLoad(UIContextGuids80.SolutionExists)]
-	[ProvideAutoLoad(UIContextGuids80.SolutionHasMultipleProjects)]
-	[ProvideAutoLoad(UIContextGuids80.SolutionHasSingleProject)]
-	[SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
-	public sealed class OpenFileCustomCommandPackage : Package, IVsSolutionEvents, IVsSolutionLoadEvents
+	public sealed class OpenFileCustomCommandPackage:Package, IVsSolutionEvents, IVsSolutionLoadEvents
 	{
 		/// <summary>
 		/// OpenFileCustomCommandPackage GUID string.
@@ -51,34 +44,12 @@ namespace OpenFileByName
 		private IVsSolution2 solution = null;
 		private uint solutionEventsCookie = 0;
 
-		private System.Threading.Thread BuildProjectFilenamesThread = null;
-
-		public static bool bIsUpdatingSolutionFiles = false;
-
 		private SolutionEvents solutionEvents;
 		private ProjectItemsEvents projectItemsEvents;
 
-		public class FilenameData
-		{
-			public string name;
-			public string filename;
-		}
-
-		public class ProjectFileNameData
-		{
-			// we need to use actual Project and not "Project.Name" string here, so that when we display the Project in the FindFile Dialog it will be
-			// the correct project name even after the project is renamed (ProjectRenamed event doesn't get called for VC projects)
-			public Project project;
-			public List<FilenameData> filenames;
-		}
-
-		public static List<ProjectFileNameData> ProjectFilenames = null;
-
-		public static Object ProjectFilenamesLock = new object();
-
 
 		/// <summary>
-		/// Initializes a new instance of the <see cref="OpenFileCustomCommand"/> class.
+		/// Initializes a new instance of the <see cref="OpenFileCustomCommandPackage"/> class.
 		/// </summary>
 		public OpenFileCustomCommandPackage()
 		{
@@ -94,13 +65,7 @@ namespace OpenFileByName
 		// IVsSolutionEvents interface
 		public int OnAfterCloseSolution(object pUnkReserved)
 		{
-			if (BuildProjectFilenamesThread != null)
-			{
-				BuildProjectFilenamesThread.Abort();
-				BuildProjectFilenamesThread.Join();
-
-				BuildProjectFilenamesThread = null;
-			}
+			OpenFileCustomCommand.ProjectFilenames = null;
 
 			return VSConstants.S_OK;
 		}
@@ -118,7 +83,7 @@ namespace OpenFileByName
 		public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
 		{
 			// when a new solution is opened, set the flag to indicate that we are still processing the solution projects
-			bIsUpdatingSolutionFiles = true;
+			OpenFileCustomCommand.bIsUpdatingSolutionFiles = true;
 
 			return VSConstants.S_OK;
 		}
@@ -183,20 +148,12 @@ namespace OpenFileByName
 
 		public int OnAfterBackgroundSolutionLoadComplete()
 		{
-			if (BuildProjectFilenamesThread != null)
-			{
-				BuildProjectFilenamesThread.Abort();
-				BuildProjectFilenamesThread.Join();
-
-				BuildProjectFilenamesThread = null;
-			}
-
-			BuildProjectFilenamesThread = new System.Threading.Thread(new BuildProjectFilenames().Run);
-			BuildProjectFilenamesThread.Priority = System.Threading.ThreadPriority.Normal;
-			BuildProjectFilenamesThread.Start();  // start the thread running
+			OpenFileCustomCommand.ProjectFilenames = null;
+			OpenFileCustomCommand.bIsUpdatingSolutionFiles = false;
 
 			return VSConstants.S_OK;
 		}
+
 
 		/// <summary>
 		/// Initialization of the package; this method is called right after the package is sited, so this is the place
@@ -224,6 +181,7 @@ namespace OpenFileByName
 			projectItemsEvents.ItemRemoved += ProjectItemsEvents_ItemRemoved;
 			projectItemsEvents.ItemRenamed += ProjectItemsEvents_ItemRenamed;
 		}
+
 
 		/// <summary>
 		/// Override of Package.Dispose() function from Microsoft.VisualStudio.Shell
@@ -260,17 +218,13 @@ namespace OpenFileByName
 
 		private void SolutionEvents_ProjectAdded(Project project)
 		{
-			lock (ProjectFilenamesLock)
+			lock (OpenFileCustomCommand.ProjectFilenamesLock)
 			{
 				try
 				{
 					// add the new project to the project filenames list
-					OpenFileCustomCommandPackage.ProjectFileNameData projectFilename = new OpenFileCustomCommandPackage.ProjectFileNameData();
-					projectFilename.project = project;
-					projectFilename.filenames = new List<OpenFileCustomCommandPackage.FilenameData>();
-					projectFilename.filenames.AddRange(OpenFileCustomCommandPackage.GetProjectFilenames(project));
-
-					OpenFileCustomCommandPackage.ProjectFilenames.Add(projectFilename);
+					OpenFileCustomCommand.ProjectFileNameData projectFilename = new OpenFileCustomCommand.ProjectFileNameData(project);
+					OpenFileCustomCommand.ProjectFilenames.Add(projectFilename);
 				}
 				catch
 				{
@@ -280,16 +234,16 @@ namespace OpenFileByName
 
 		private void SolutionEvents_ProjectRemoved(Project project)
 		{
-			lock (ProjectFilenamesLock)
+			lock (OpenFileCustomCommand.ProjectFilenamesLock)
 			{
 				try
 				{
 					// remove the project from the project filenames list
-					for (int index = 0; index < ProjectFilenames.Count; ++index)
+					for (int index = 0; index < OpenFileCustomCommand.ProjectFilenames.Count; ++index)
 					{
-						if (ProjectFilenames[index].project.Name == project.Name)
+						if (OpenFileCustomCommand.ProjectFilenames[index].project.Name == project.Name)
 						{
-							ProjectFilenames.RemoveAt(index);
+							OpenFileCustomCommand.ProjectFilenames.RemoveAt(index);
 						}
 					}
 				}
@@ -303,16 +257,16 @@ namespace OpenFileByName
 		{
 			// WARNING!!! - This does NOT get called when a VC project is renamed (but does get called when a C# project is renamed)
 
-			lock (ProjectFilenamesLock)
+			lock (OpenFileCustomCommand.ProjectFilenamesLock)
 			{
 				try
 				{
 					// rename the project in the profect filenames list
-					for (int index = 0; index < ProjectFilenames.Count; ++index)
+					for (int index = 0; index < OpenFileCustomCommand.ProjectFilenames.Count; ++index)
 					{
-						if (ProjectFilenames[index].project.Name == oldName)
+						if (OpenFileCustomCommand.ProjectFilenames[index].project.Name == oldName)
 						{
-							ProjectFilenames[index].project = project;
+							OpenFileCustomCommand.ProjectFilenames[index].project = project;
 						}
 					}
 				}
@@ -324,7 +278,7 @@ namespace OpenFileByName
 
 		private void ProjectItemsEvents_ItemAdded(ProjectItem projectItem)
 		{
-			lock (ProjectFilenamesLock)
+			lock (OpenFileCustomCommand.ProjectFilenamesLock)
 			{
 				try
 				{
@@ -332,15 +286,15 @@ namespace OpenFileByName
 
 					if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
 					{
-						for (int projectIndex = 0; projectIndex < ProjectFilenames.Count; ++projectIndex)
+						for (int projectIndex = 0; projectIndex < OpenFileCustomCommand.ProjectFilenames.Count; ++projectIndex)
 						{
-							if (ProjectFilenames[projectIndex].project.Name == projectName)
+							if (OpenFileCustomCommand.ProjectFilenames[projectIndex].project.Name == projectName)
 							{
-								FilenameData filenameData = new FilenameData();
+								OpenFileCustomCommand.FilenameData filenameData = new OpenFileCustomCommand.FilenameData();
 								filenameData.name = projectItem.Name;
 								filenameData.filename = projectItem.get_FileNames(0);
 
-								ProjectFilenames[projectIndex].filenames.Add(filenameData);
+								OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.Add(filenameData);
 
 								break;
 							}
@@ -355,7 +309,7 @@ namespace OpenFileByName
 
 		private void ProjectItemsEvents_ItemRemoved(ProjectItem projectItem)
 		{
-			lock (ProjectFilenamesLock)
+			lock (OpenFileCustomCommand.ProjectFilenamesLock)
 			{
 				try
 				{
@@ -366,15 +320,15 @@ namespace OpenFileByName
 						string projectItemFilename = projectItem.get_FileNames(0);
 						bool bDone = false;
 
-						for (int projectIndex = 0; !bDone && (projectIndex < ProjectFilenames.Count); ++projectIndex)
+						for (int projectIndex = 0; !bDone && (projectIndex < OpenFileCustomCommand.ProjectFilenames.Count); ++projectIndex)
 						{
-							if (ProjectFilenames[projectIndex].project.Name == projectName)
+							if (OpenFileCustomCommand.ProjectFilenames[projectIndex].project.Name == projectName)
 							{
-								for (int itemIndex = 0; !bDone && (itemIndex < ProjectFilenames[projectIndex].filenames.Count); ++itemIndex)
+								for (int itemIndex = 0; !bDone && (itemIndex < OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.Count); ++itemIndex)
 								{
-									if (ProjectFilenames[projectIndex].filenames[itemIndex].filename == projectItemFilename)
+									if (OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[itemIndex].filename == projectItemFilename)
 									{
-										ProjectFilenames[projectIndex].filenames.RemoveAt(itemIndex);
+										OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.RemoveAt(itemIndex);
 										bDone = true;  // break out of both loops
 									}
 								}
@@ -390,7 +344,7 @@ namespace OpenFileByName
 
 		private void ProjectItemsEvents_ItemRenamed(ProjectItem projectItem, string oldName)
 		{
-			lock (ProjectFilenamesLock)
+			lock (OpenFileCustomCommand.ProjectFilenamesLock)
 			{
 				try
 				{
@@ -401,16 +355,16 @@ namespace OpenFileByName
 						string projectItemFilename = projectItem.get_FileNames(0);
 						bool bDone = false;
 
-						for (int projectIndex = 0; !bDone && (projectIndex < ProjectFilenames.Count); ++projectIndex)
+						for (int projectIndex = 0; !bDone && (projectIndex < OpenFileCustomCommand.ProjectFilenames.Count); ++projectIndex)
 						{
-							if (ProjectFilenames[projectIndex].project.Name == projectName)
+							if (OpenFileCustomCommand.ProjectFilenames[projectIndex].project.Name == projectName)
 							{
-								for (int itemIndex = 0; !bDone && (itemIndex < ProjectFilenames[projectIndex].filenames.Count); ++itemIndex)
+								for (int itemIndex = 0; !bDone && (itemIndex < OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.Count); ++itemIndex)
 								{
-									if (ProjectFilenames[projectIndex].filenames[itemIndex].name == oldName)
+									if (OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[itemIndex].name == oldName)
 									{
-										ProjectFilenames[projectIndex].filenames[itemIndex].name = projectItem.Name;
-										ProjectFilenames[projectIndex].filenames[itemIndex].filename = projectItem.get_FileNames(0);
+										OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[itemIndex].name = projectItem.Name;
+										OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[itemIndex].filename = projectItem.get_FileNames(0);
 
 										bDone = true;  // break out of both loops
 									}
@@ -423,92 +377,6 @@ namespace OpenFileByName
 				{
 				}
 			}
-		}
-
-
-		public static IEnumerable<FilenameData> GetProjectItemFilenames(ProjectItem projectItem)
-		{
-			List<FilenameData> list = new List<FilenameData>();
-
-			if (projectItem == null)
-			{
-				return list;
-			}
-
-			try
-			{
-				if (projectItem.SubProject != null)  // i.e. Kind == vsProjectItemKindSubProject
-				{
-					list.AddRange(GetProjectFilenames(projectItem.SubProject));
-				}
-				else if ((projectItem.ProjectItems != null) && (projectItem.ProjectItems.Count != 0))  // i.e. Kind == vsProjectItemKindVirtualFolder
-				{
-					foreach (ProjectItem childProjectItem in projectItem.ProjectItems)
-					{
-						list.AddRange(GetProjectItemFilenames(childProjectItem));
-					}
-				}
-				else if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
-				{
-					if ((!projectItem.Name.EndsWith(".vcxproj.filters")) &&
-						(!projectItem.Name.EndsWith(".vcxproj.user")) &&
-						(!projectItem.Name.EndsWith(".csproj.user")))
-					{
-						FilenameData filenameData = new FilenameData();
-						filenameData.name = projectItem.Name;
-						filenameData.filename = projectItem.get_FileNames(0);
-
-						list.Add(filenameData);
-					}
-				}
-			}
-			catch
-			{
-			}
-
-			return list;
-		}
-
-		public static IEnumerable<FilenameData> GetProjectFilenames(Project project)
-		{
-			List<FilenameData> list = new List<FilenameData>();
-
-			if (project == null)
-			{
-				return list;
-			}
-
-			try
-			{
-				foreach (ProjectItem projectItem in project.ProjectItems)
-				{
-					if (projectItem != null)
-					{
-						if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
-						{
-							if ((!projectItem.Name.EndsWith(".vcxproj.filters")) &&
-								(!projectItem.Name.EndsWith(".vcxproj.user")) &&
-								(!projectItem.Name.EndsWith(".csproj.user")))
-							{
-								FilenameData filenameData = new FilenameData();
-								filenameData.name = projectItem.Name;
-								filenameData.filename = projectItem.get_FileNames(0);
-
-								list.Add(filenameData);
-							}
-						}
-						else
-						{
-							list.AddRange(GetProjectItemFilenames(projectItem));
-						}
-					}
-				}
-			}
-			catch
-			{
-			}
-
-			return list;
 		}
 
 		#endregion

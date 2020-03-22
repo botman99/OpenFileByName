@@ -1,10 +1,10 @@
 ﻿//
-// Copyright (c) 2018 Jeffrey Broome.
+// Copyright 2020 - Jeffrey "botman" Broome
 //
 
 using System;
-using System.Drawing;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 
 using EnvDTE;
@@ -14,7 +14,7 @@ using Microsoft.VisualStudio.Shell;
 
 namespace OpenFileByName
 {
-	public partial class OpenFileDialog : Form
+	public partial class OpenFileDialog:Form
 	{
 		public const int WM_USER = 0x0400;  // Windows private user messages
 		public const int WM_WORKER_DONE = WM_USER;
@@ -81,7 +81,9 @@ namespace OpenFileByName
 
 						if ((items != null) && (items.Count > 0))
 						{
+							FileListView.BeginUpdate();	
 							FileListView.Items.AddRange(items.ToArray());
+							FileListView.EndUpdate();
 						}
 					}
 					catch
@@ -152,7 +154,7 @@ namespace OpenFileByName
 
 			items = new List<ListViewItem>();
 
-			if ((OpenFileCustomCommandPackage.ProjectFilenames != null) && (OpenFileCustomCommandPackage.ProjectFilenames.Count > 0))
+			if ((OpenFileCustomCommand.ProjectFilenames != null) && (OpenFileCustomCommand.ProjectFilenames.Count > 0))
 			{
 				if (WorkerThread != null)  // if there's already a worker thread running, kill it
 				{
@@ -285,8 +287,11 @@ namespace OpenFileByName
 		{
 			input = FileComboBox.Text;
 
-			update_timer.Enabled = true;
-			update_timer.Interval = 500;  // wait 500ms before starting worker thread
+			if (update_timer != null)
+			{
+				update_timer.Enabled = true;
+				update_timer.Interval = 500;  // wait 500ms before starting worker thread
+			}
 		}
 
 		private void FileListView_ColumnClick(object sender, ColumnClickEventArgs e)
