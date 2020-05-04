@@ -31,6 +31,8 @@ namespace OpenFileByName
 		private int auto_save_top = -1;
 
 		private ListViewColumnSorter columnSorter;
+		private const int NumColumns = 3;
+		private int[] ColumnWidthSize;  // store the ListView column width size so we can tell if they have actually changed
 
 		public string input;
 
@@ -67,6 +69,32 @@ namespace OpenFileByName
 			columnSorter.SetSortIcon(FileListView);
 
 			FileListView.ListViewItemSorter = columnSorter;  // enable the ListView column sorting
+
+			ColumnWidthSize = new int[NumColumns];
+
+			if ((Properties.Settings.Default.ListViewColumnWidth0 != 0) && (Properties.Settings.Default.ListViewColumnWidth1 != 0))
+			{
+				FileListView.Columns[0].Width = Properties.Settings.Default.ListViewColumnWidth0;
+				FileListView.Columns[1].Width = Properties.Settings.Default.ListViewColumnWidth1;
+				FileListView.Columns[2].Width = Properties.Settings.Default.ListViewColumnWidth2;
+			}
+
+			for( int column_index = 0; column_index < NumColumns; column_index++ )
+			{
+				ColumnWidthSize[column_index] = FileListView.Columns[column_index].Width;
+			}
+
+			if (Properties.Settings.Default.FontFamilyName != "")
+			{
+				FontFamily font_family = new FontFamily(Properties.Settings.Default.FontFamilyName);
+				float size = Properties.Settings.Default.FontSizeInPoints;
+				FontStyle style = (FontStyle)Properties.Settings.Default.FontStyle;
+				GraphicsUnit unit = (GraphicsUnit)Properties.Settings.Default.FontGraphicsUnit;
+
+				FileListView.Font = new Font(font_family, size, style, unit);
+				FileComboBox.Font = FileListView.Font;
+				FileComboBox.Height = FileComboBox.ItemHeight + 8;
+			}
 		}
 
 		protected override void WndProc(ref Message m)
@@ -84,6 +112,8 @@ namespace OpenFileByName
 							FileListView.BeginUpdate();	
 							FileListView.Items.AddRange(items.ToArray());
 							FileListView.EndUpdate();
+
+							SetListViewLastColumnWidth();
 						}
 					}
 					catch
@@ -98,17 +128,6 @@ namespace OpenFileByName
 			}
 
 			base.WndProc(ref m);
-		}
-
-		private void SetListViewLastColumnWidth()
-		{
-			// auto size the last column to the width of the list view client area minus the width of the other two columns
-			int width = FileListView.ClientSize.Width - (FileListView.Columns[0].Width + FileListView.Columns[1].Width);
-
-			if (width > FileListView.Columns[2].Width)  // only adjust the width if the last column isn't already wide enough
-			{
-				FileListView.Columns[2].Width = width;
-			}
 		}
 
 		private void OnUpdateTimerEvent(object source, System.Timers.ElapsedEventArgs e)
@@ -187,8 +206,6 @@ namespace OpenFileByName
 			{
 				Location = new Point(Properties.Settings.Default.OpenFileDialog_Left, Properties.Settings.Default.OpenFileDialog_Top);
 			}
-
-			SetListViewLastColumnWidth();
 
 			ActiveControl = FileComboBox;
 
@@ -294,6 +311,46 @@ namespace OpenFileByName
 			}
 		}
 
+		private void FileListView_ColumnWidthChanged(object sender, ColumnWidthChangedEventArgs e)
+		{
+			if (bWindowInitComplete)
+			{
+				bool bHasColumnWidthChanged = false;
+
+				for( int column_index = 0; column_index < NumColumns; column_index++ )
+				{
+					if( ColumnWidthSize[column_index] != FileListView.Columns[column_index].Width )
+					{
+						bHasColumnWidthChanged = true;
+					}
+				}
+
+				if( bHasColumnWidthChanged )
+				{
+					Properties.Settings.Default.ListViewColumnWidth0 = FileListView.Columns[0].Width;
+					Properties.Settings.Default.ListViewColumnWidth1 = FileListView.Columns[1].Width;
+					Properties.Settings.Default.ListViewColumnWidth2 = FileListView.Columns[2].Width;
+					Properties.Settings.Default.Save();
+				}
+
+				SetListViewLastColumnWidth();
+			}
+		}
+
+		private void SetListViewLastColumnWidth()
+		{
+			if (bWindowInitComplete)
+			{
+				// auto size the last column to the width of the list view client area minus the width of the other two columns
+				int width = FileListView.ClientSize.Width - (FileListView.Columns[0].Width + FileListView.Columns[1].Width);
+
+				if (width > FileListView.Columns[2].Width)  // only adjust the width if the last column isn't already wide enough
+				{
+					FileListView.Columns[2].Width = width;
+				}
+			}
+		}
+
 		private void FileListView_ColumnClick(object sender, ColumnClickEventArgs e)
 		{
 			// Reverse the current sort direction for this column.
@@ -327,9 +384,17 @@ namespace OpenFileByName
 
 		private void OptionsButton_Click(object sender, EventArgs e)
 		{
-			OpenFileOptionsDialog openFileOptionsDialog = new OpenFileByName.OpenFileOptionsDialog();
+			OpenFileOptionsDialog openFileOptionsDialog = new OpenFileByName.OpenFileOptionsDialog(FileListView);
 
-			openFileOptionsDialog.ShowDialog(this);
+			if (openFileOptionsDialog.ShowDialog(this) != DialogResult.Cancel)
+			{
+				FileListView.Font = openFileOptionsDialog.NewFont;
+
+				FileComboBox.Font = FileListView.Font;
+				FileComboBox.Height = FileComboBox.ItemHeight + 8;
+
+				FileListView.Invalidate();
+			}
 		}
 
 		private void OpenFileDialog_KeyDown(object sender, KeyEventArgs e)

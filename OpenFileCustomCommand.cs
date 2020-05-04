@@ -164,6 +164,7 @@ namespace OpenFileByName
 				}
 			}
 
+
 			if (Properties.Settings.Default.UseSelectedText)
 			{
 				DTE2 dte2 = Package.GetGlobalService(typeof(DTE)) as DTE2;
@@ -182,10 +183,7 @@ namespace OpenFileByName
 
 			openFileDialog.ShowDialog();
 
-			if (openFileDialog.DialogResult == DialogResult.OK)
-			{
-				input = openFileDialog.input;
-			}
+			input = openFileDialog.input;
 		}
 
 

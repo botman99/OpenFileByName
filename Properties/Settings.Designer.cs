@@ -12,7 +12,7 @@ namespace OpenFileByName.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "15.7.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "15.9.0.0")]
     internal sealed partial class Settings : global::System.Configuration.ApplicationSettingsBase {
         
         private static Settings defaultInstance = ((Settings)(global::System.Configuration.ApplicationSettingsBase.Synchronized(new Settings())));
@@ -92,6 +92,90 @@ namespace OpenFileByName.Properties {
             }
             set {
                 this["OpenFileDialog_Left"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string FontFamilyName {
+            get {
+                return ((string)(this["FontFamilyName"]));
+            }
+            set {
+                this["FontFamilyName"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public float FontSizeInPoints {
+            get {
+                return ((float)(this["FontSizeInPoints"]));
+            }
+            set {
+                this["FontSizeInPoints"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int FontStyle {
+            get {
+                return ((int)(this["FontStyle"]));
+            }
+            set {
+                this["FontStyle"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int FontGraphicsUnit {
+            get {
+                return ((int)(this["FontGraphicsUnit"]));
+            }
+            set {
+                this["FontGraphicsUnit"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int ListViewColumnWidth0 {
+            get {
+                return ((int)(this["ListViewColumnWidth0"]));
+            }
+            set {
+                this["ListViewColumnWidth0"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int ListViewColumnWidth1 {
+            get {
+                return ((int)(this["ListViewColumnWidth1"]));
+            }
+            set {
+                this["ListViewColumnWidth1"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int ListViewColumnWidth2 {
+            get {
+                return ((int)(this["ListViewColumnWidth2"]));
+            }
+            set {
+                this["ListViewColumnWidth2"] = value;
             }
         }
     }
