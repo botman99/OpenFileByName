@@ -113,6 +113,40 @@ namespace OpenFileByName
 							FileListView.Items.AddRange(items.ToArray());
 							FileListView.EndUpdate();
 
+							if (input != "")
+							{
+								int select_index = -1;
+								for (int index = 0; index < items.Count; ++index)
+								{
+									if (String.Equals(FileListView.Items[index].Text, input, StringComparison.OrdinalIgnoreCase))  // if there's an exact match, select it
+									{
+										select_index = index;
+										break;
+									}
+								}
+
+								if (select_index == -1)  // if we didn't find an exact match, find the first string that begins with the input text and select it
+								{
+									for (int index = 0; index < items.Count; ++index)
+									{
+										if (FileListView.Items[index].Text.IndexOf(input, StringComparison.OrdinalIgnoreCase) == 0)
+										{
+											select_index = index;
+											break;
+										}
+									}
+								}
+
+								if (select_index >= 0)
+								{
+									//FileListView.Height;
+									FileListView.Items[select_index].Selected = true;
+									FileListView.Items[select_index].Focused = true;
+									FileListView.EnsureVisible(select_index);
+									FileListView.Focus();
+								}
+							}
+
 							SetListViewLastColumnWidth();
 						}
 					}
