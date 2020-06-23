@@ -181,7 +181,7 @@ namespace OpenFileByName
 
 			OpenFileDialog openFileDialog = new OpenFileByName.OpenFileDialog(input);
 
-			openFileDialog.ShowDialog();
+			openFileDialog.Show();  // don't use a modal dialog so we can set focus to opened documents
 
 			input = openFileDialog.input;
 		}

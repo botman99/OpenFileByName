@@ -44,6 +44,8 @@ namespace OpenFileByName
 
 			InitializeComponent();
 
+			TopMost = true;  // since we are not model, make Topmost so we are always visible while open
+
 			pictureBox1.Image = null;
 
 			input = previous_input;
@@ -139,11 +141,9 @@ namespace OpenFileByName
 
 								if (select_index >= 0)
 								{
-									//FileListView.Height;
 									FileListView.Items[select_index].Selected = true;
 									FileListView.Items[select_index].Focused = true;
 									FileListView.EnsureVisible(select_index);
-									FileListView.Focus();
 								}
 							}
 
@@ -293,6 +293,10 @@ namespace OpenFileByName
 					if (item.SubItems[2].Text != "")
 					{
 						dte.ItemOperations.OpenFile(item.SubItems[2].Text);
+						dte.ActiveDocument.Activate();  // set focus on the document
+						dte.ActiveDocument.ActiveWindow.Activate();  // set focus on the document's window
+
+						this.Activate();
 					}
 				}
 			}
@@ -324,11 +328,20 @@ namespace OpenFileByName
 				if (item.SubItems[2].Text != "")
 				{
 					dte.ItemOperations.OpenFile(item.SubItems[2].Text);
+					dte.ActiveDocument.Activate();  // set focus on the document
+					dte.ActiveDocument.ActiveWindow.Activate();  // set focus on the document's window
+
+					this.Activate();
 				}
 			}
 
 			if (Properties.Settings.Default.CloseDialogOnDoubleclick)
 			{
+				if (WorkerThread != null)  // if there's already a worker thread running, kill it
+				{
+					WorkerThread.Abort();
+				}
+
 				DialogResult = DialogResult.OK;
 				Close();
 			}
