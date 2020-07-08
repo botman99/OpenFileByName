@@ -301,7 +301,9 @@ namespace OpenFileByName
 				}
 			}
 
-			DialogResult = DialogResult.OK;
+			Globals.bSingleton = false;
+			Globals.input = input;
+
 			Close();
 		}
 
@@ -312,7 +314,9 @@ namespace OpenFileByName
 				WorkerThread.Abort();
 			}
 
-			DialogResult = DialogResult.Cancel;
+			Globals.bSingleton = false;
+			Globals.input = input;
+
 			Close();
 		}
 
@@ -342,7 +346,9 @@ namespace OpenFileByName
 					WorkerThread.Abort();
 				}
 
-				DialogResult = DialogResult.OK;
+				Globals.bSingleton = false;
+				Globals.input = input;
+
 				Close();
 			}
 		}
@@ -453,7 +459,9 @@ namespace OpenFileByName
 					WorkerThread.Abort();
 				}
 
-				DialogResult = DialogResult.Cancel;
+				Globals.bSingleton = false;
+				Globals.input = input;
+
 				Close();
 			}
 		}

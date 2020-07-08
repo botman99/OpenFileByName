@@ -15,6 +15,12 @@ using System.Windows.Forms;
 
 namespace OpenFileByName
 {
+	static class Globals
+	{
+		public static bool bSingleton = false;  // singleton to prevent opening multiple dialog boxes at once (since dialog box is no longer modal)
+		public static string input = "";
+	}
+
 	/// <summary>
 	/// Command handler
 	/// </summary>
@@ -62,8 +68,6 @@ namespace OpenFileByName
 		public static Object ProjectFilenamesLock = new object();
 
 		public static bool bIsUpdatingSolutionFiles = false;
-		private string input = "";
-
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="OpenFileCustomCommand"/> class.
@@ -126,6 +130,11 @@ namespace OpenFileByName
 		/// <param name="e">Event args.</param>
 		private void Execute(object sender,EventArgs e)
 		{
+			if (Globals.bSingleton)
+			{
+				return;
+			}
+
 			if (bIsUpdatingSolutionFiles)
 			{
 				string message = string.Format(CultureInfo.CurrentCulture, "Solution files are being processed, please wait.", this.GetType().FullName);
@@ -174,16 +183,15 @@ namespace OpenFileByName
 
 					if ((selection != null) && (selection.Text != "") && (selection.Text.Length < 260))  // 260 is MAX_PATH
 					{
-						input = selection.Text;
+						Globals.input = selection.Text;
 					}
 				}
 			}
 
-			OpenFileDialog openFileDialog = new OpenFileByName.OpenFileDialog(input);
+			OpenFileDialog openFileDialog = new OpenFileByName.OpenFileDialog(Globals.input);
 
+			Globals.bSingleton = true;
 			openFileDialog.Show();  // don't use a modal dialog so we can set focus to opened documents
-
-			input = openFileDialog.input;
 		}
 
 
