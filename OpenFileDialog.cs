@@ -49,6 +49,7 @@ namespace OpenFileByName
 			pictureBox1.Image = null;
 
 			input = previous_input;
+			Globals.input = input;
 
 			FileComboBox.Text = input;
 
@@ -248,6 +249,11 @@ namespace OpenFileByName
 			bWindowInitComplete = true;
 		}
 
+		private void OpenFileDialog_FormClosing(object sender, FormClosingEventArgs e)
+		{
+			Globals.bSingleton = false;
+		}
+
 		private void OpenFileDialog_Move(object sender, EventArgs e)
 		{
 			if (bWindowInitComplete)
@@ -301,9 +307,6 @@ namespace OpenFileByName
 				}
 			}
 
-			Globals.bSingleton = false;
-			Globals.input = input;
-
 			Close();
 		}
 
@@ -313,9 +316,6 @@ namespace OpenFileByName
 			{
 				WorkerThread.Abort();
 			}
-
-			Globals.bSingleton = false;
-			Globals.input = input;
 
 			Close();
 		}
@@ -346,9 +346,6 @@ namespace OpenFileByName
 					WorkerThread.Abort();
 				}
 
-				Globals.bSingleton = false;
-				Globals.input = input;
-
 				Close();
 			}
 		}
@@ -356,6 +353,7 @@ namespace OpenFileByName
 		private void FileComboBox_TextChanged(object sender, EventArgs e)
 		{
 			input = FileComboBox.Text;
+			Globals.input = input;
 
 			if (update_timer != null)
 			{
@@ -458,9 +456,6 @@ namespace OpenFileByName
 				{
 					WorkerThread.Abort();
 				}
-
-				Globals.bSingleton = false;
-				Globals.input = input;
 
 				Close();
 			}

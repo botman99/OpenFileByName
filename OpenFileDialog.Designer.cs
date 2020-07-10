@@ -171,6 +171,7 @@
 			this.MinimumSize = new System.Drawing.Size(901, 297);
 			this.Name = "OpenFileDialog";
 			this.Text = "Open File By Name";
+			this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.OpenFileDialog_FormClosing);
 			this.Shown += new System.EventHandler(this.OpenFile_Shown);
 			this.SizeChanged += new System.EventHandler(this.OpenFile_SizeChanged);
 			this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.OpenFileDialog_KeyDown);
