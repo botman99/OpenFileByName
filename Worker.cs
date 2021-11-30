@@ -32,14 +32,14 @@ namespace OpenFileByName
 				{
 					try
 					{
-						for( int filenameIndex = 0; filenameIndex < OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.Count; ++filenameIndex)
+						for( int filenameIndex = 0; filenameIndex < OpenFileCustomCommand.ProjectFilenames[projectIndex].Filenames.Count; ++filenameIndex)
 						{
-							if ((Input == "") || OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[filenameIndex].name.IndexOf(Input, StringComparison.CurrentCultureIgnoreCase) >= 0)
+							if ((Input == "") || OpenFileCustomCommand.ProjectFilenames[projectIndex].Filenames[filenameIndex].Name.IndexOf(Input, StringComparison.CurrentCultureIgnoreCase) >= 0)
 							{
-								ListViewItem item = new ListViewItem(OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[filenameIndex].name);
+								ListViewItem item = new ListViewItem(OpenFileCustomCommand.ProjectFilenames[projectIndex].Filenames[filenameIndex].Name);
 
-								item.SubItems.Add(OpenFileCustomCommand.ProjectFilenames[projectIndex].project.Name);
-								item.SubItems.Add(OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[filenameIndex].filename);
+								item.SubItems.Add(OpenFileCustomCommand.ProjectFilenames[projectIndex].ProjectPathName);
+								item.SubItems.Add(OpenFileCustomCommand.ProjectFilenames[projectIndex].Filenames[filenameIndex].Pathname);
 
 								OpenFileDialog.items.Add(item);
 							}

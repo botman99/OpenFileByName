@@ -285,6 +285,8 @@ namespace OpenFileByName
 
 		private void OK_Button_Click(object sender, EventArgs e)
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+
 			if (WorkerThread != null)  // if there's already a worker thread running, kill it
 			{
 				WorkerThread.Abort();
@@ -292,18 +294,30 @@ namespace OpenFileByName
 
 			if (FileListView.SelectedItems.Count > 0)
 			{
-				DTE dte = Package.GetGlobalService(typeof(DTE)) as DTE;
-
-				foreach (ListViewItem item in FileListView.SelectedItems)
+				try
 				{
-					if (item.SubItems[2].Text != "")
-					{
-						dte.ItemOperations.OpenFile(item.SubItems[2].Text);
-						dte.ActiveDocument.Activate();  // set focus on the document
-						dte.ActiveDocument.ActiveWindow.Activate();  // set focus on the document's window
+					DTE dte = Package.GetGlobalService(typeof(DTE)) as DTE;
 
-						this.Activate();
+					if (dte != null)
+					{
+						foreach (ListViewItem item in FileListView.SelectedItems)
+						{
+							if (item.SubItems[2].Text != "")
+							{
+								if (System.IO.File.Exists(item.SubItems[2].Text))
+								{
+									dte.ItemOperations.OpenFile(item.SubItems[2].Text);
+									dte.ActiveDocument.Activate();  // set focus on the document
+									dte.ActiveDocument.ActiveWindow.Activate();  // set focus on the document's window
+
+									this.Activate();
+								}
+							}
+						}
 					}
+				}
+				catch
+				{
 				}
 			}
 
@@ -322,20 +336,34 @@ namespace OpenFileByName
 
 		private void FileListView_MouseDoubleClick(object sender, MouseEventArgs e)
 		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+
 			ListViewHitTestInfo info = FileListView.HitTest(e.X, e.Y);
 			ListViewItem item = info.Item;
 
 			if (item != null)
 			{
-				DTE dte = Package.GetGlobalService(typeof(DTE)) as DTE;
-
-				if (item.SubItems[2].Text != "")
+				try
 				{
-					dte.ItemOperations.OpenFile(item.SubItems[2].Text);
-					dte.ActiveDocument.Activate();  // set focus on the document
-					dte.ActiveDocument.ActiveWindow.Activate();  // set focus on the document's window
+					DTE dte = Package.GetGlobalService(typeof(DTE)) as DTE;
 
-					this.Activate();
+					if (dte != null)
+					{
+						if (item.SubItems[2].Text != "")
+						{
+							if (System.IO.File.Exists(item.SubItems[2].Text))
+							{
+								dte.ItemOperations.OpenFile(item.SubItems[2].Text);
+								dte.ActiveDocument.Activate();  // set focus on the document
+								dte.ActiveDocument.ActiveWindow.Activate();  // set focus on the document's window
+
+								this.Activate();
+							}
+						}
+					}
+				}
+				catch
+				{
 				}
 			}
 

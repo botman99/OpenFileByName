@@ -82,7 +82,7 @@
 			// 
 			// Project
 			// 
-			this.Project.Text = "Project";
+			this.Project.Text = "Project or Folder";
 			this.Project.Width = 100;
 			// 
 			// Path

@@ -3,13 +3,13 @@
 //
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
-
-using EnvDTE;
-using EnvDTE80;
+using Task = System.Threading.Tasks.Task;
 
 namespace OpenFileByName
 {
@@ -30,11 +30,12 @@ namespace OpenFileByName
 	/// To get loaded into VS, the package must be referred by &lt;Asset Type="Microsoft.VisualStudio.VsPackage" ...&gt; in .vsixmanifest file.
 	/// </para>
 	/// </remarks>
-	[PackageRegistration(UseManagedResourcesOnly = true)]
-	[InstalledProductRegistration("OpenFileByName","Opens a file in the solution by filename","1.0",IconResourceID = 400)] // Info on this package for Help/About
-	[ProvideMenuResource("Menus.ctmenu", 1)]
+	[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+	[InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)] // Info on this package for Help/About
 	[Guid(OpenFileCustomCommandPackage.PackageGuidString)]
-	public sealed class OpenFileCustomCommandPackage:Package, IVsSolutionEvents, IVsSolutionLoadEvents
+	[SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
+	[ProvideMenuResource("Menus.ctmenu", 1)]
+	public sealed class OpenFileCustomCommandPackage : AsyncPackage, IVsSolutionEvents, IVsSolutionLoadEvents, IVsTrackProjectDocumentsEvents2
 	{
 		/// <summary>
 		/// OpenFileCustomCommandPackage GUID string.
@@ -44,61 +45,70 @@ namespace OpenFileByName
 		private IVsSolution2 solution = null;
 		private uint solutionEventsCookie = 0;
 
-		private SolutionEvents solutionEvents;
-		private ProjectItemsEvents projectItemsEvents;
-
-
-		/// <summary>
-		/// Initializes a new instance of the <see cref="OpenFileCustomCommandPackage"/> class.
-		/// </summary>
-		public OpenFileCustomCommandPackage()
-		{
-			// Inside this method you can place any initialization code that does not require
-			// any Visual Studio service because at this point the package object is created but
-			// not sited yet inside Visual Studio environment. The place to do all the other
-			// initialization is the Initialize method.
-		}
+		private IVsTrackProjectDocuments2 ProjectDocuments = null;
+		private uint projectDocumentsEventsCookie = 0;
 
 		#region Package Members
 
-
-		// IVsSolutionEvents interface
-		public int OnAfterCloseSolution(object pUnkReserved)
+		/// <summary>
+		/// Initialization of the package; this method is called right after the package is sited, so this is the place
+		/// where you can put all the initialization code that rely on services provided by VisualStudio.
+		/// </summary>
+		/// <param name="cancellationToken">A cancellation token to monitor for initialization cancellation, which can occur when VS is shutting down.</param>
+		/// <param name="progress">A provider for progress updates.</param>
+		/// <returns>A task representing the async work of package initialization, or an already completed task if there is none. Do not return null from this method.</returns>
+		protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
 		{
-			OpenFileCustomCommand.ProjectFilenames = null;
+			// When initialized asynchronously, the current thread may be a background thread at this point.
+			// Do any initialization that requires the UI thread after switching to the UI thread.
+			await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-			return VSConstants.S_OK;
+			UnadviseSolutionEvents();
+			AdviseSolutionEvents();
+
+		    await OpenFileCustomCommand.InitializeAsync(this);
+        }
+
+		private void AdviseSolutionEvents()
+		{
+			ThreadHelper.ThrowIfNotOnUIThread();
+
+			// Get the solution interface
+			solution = ServiceProvider.GlobalProvider.GetService(typeof(SVsSolution)) as IVsSolution2;
+			if (solution != null)
+			{
+				// Register for solution events
+				solution.AdviseSolutionEvents(this, out solutionEventsCookie);
+			}
+
+			// Get the ProjectDocuments interface
+			ProjectDocuments = Package.GetGlobalService(typeof(SVsTrackProjectDocuments)) as IVsTrackProjectDocuments2;
+			if (ProjectDocuments != null)
+			{
+				// Register for project documents events
+				ProjectDocuments.AdviseTrackProjectDocumentsEvents(this, out projectDocumentsEventsCookie);
+			}
 		}
 
-		public int OnAfterLoadProject(IVsHierarchy pStubHierarchy, IVsHierarchy pRealHierarchy)
+		private void UnadviseSolutionEvents()
 		{
-			return VSConstants.S_OK;
+			ThreadHelper.ThrowIfNotOnUIThread();
+
+			// Unadvise all events
+			if (solution != null && solutionEventsCookie != 0)
+			{
+				solution.UnadviseSolutionEvents(solutionEventsCookie);
+			}
+
+			if (ProjectDocuments != null && projectDocumentsEventsCookie != 0)
+			{
+				ProjectDocuments.UnadviseTrackProjectDocumentsEvents(projectDocumentsEventsCookie);
+			}
 		}
 
+
+		// IVsSolutionEvents interface begin
 		public int OnAfterOpenProject(IVsHierarchy pHierarchy, int fAdded)
-		{
-			return VSConstants.S_OK;
-		}
-
-		public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
-		{
-			// when a new solution is opened, set the flag to indicate that we are still processing the solution projects
-			OpenFileCustomCommand.bIsUpdatingSolutionFiles = true;
-
-			return VSConstants.S_OK;
-		}
-
-		public int OnBeforeCloseProject(IVsHierarchy pHierarchy, int fRemoved)
-		{
-			return VSConstants.S_OK;
-		}
-
-		public int OnBeforeCloseSolution(object pUnkReserved)
-		{
-			return VSConstants.S_OK;
-		}
-
-		public int OnBeforeUnloadProject(IVsHierarchy pRealHierarchy, IVsHierarchy pStubHierarchy)
 		{
 			return VSConstants.S_OK;
 		}
@@ -108,7 +118,12 @@ namespace OpenFileByName
 			return VSConstants.S_OK;
 		}
 
-		public int OnQueryCloseSolution(object pUnkReserved, ref int pfCancel)
+		public int OnBeforeCloseProject(IVsHierarchy pHierarchy, int fRemoved)
+		{
+			return VSConstants.S_OK;
+		}
+
+		public int OnAfterLoadProject(IVsHierarchy pStubHierarchy, IVsHierarchy pRealHierarchy)
 		{
 			return VSConstants.S_OK;
 		}
@@ -118,8 +133,36 @@ namespace OpenFileByName
 			return VSConstants.S_OK;
 		}
 
+		public int OnBeforeUnloadProject(IVsHierarchy pRealHierarchy, IVsHierarchy pStubHierarchy)
+		{
+			return VSConstants.S_OK;
+		}
 
-		// IVsSolutionLoadEvents interface
+		public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
+		{
+			OpenFileCustomCommand.bForceUpdate = true;
+
+			return VSConstants.S_OK;
+		}
+
+		public int OnQueryCloseSolution(object pUnkReserved, ref int pfCancel)
+		{
+			return VSConstants.S_OK;
+		}
+
+		public int OnBeforeCloseSolution(object pUnkReserved)
+		{
+			return VSConstants.S_OK;
+		}
+
+		public int OnAfterCloseSolution(object pUnkReserved)
+		{
+			return VSConstants.S_OK;
+		}
+		// IVsSolutionEvents interface end
+
+
+		// IVsSolutionLoadEvents interface begin
 		public int OnBeforeOpenSolution(string pszSolutionFilename)
 		{
 			return VSConstants.S_OK;
@@ -133,6 +176,7 @@ namespace OpenFileByName
 		public int OnQueryBackgroundLoadProjectBatch(out bool pfShouldDelayLoadToNextIdle)
 		{
 			pfShouldDelayLoadToNextIdle = false;
+
 			return VSConstants.S_OK;
 		}
 
@@ -148,236 +192,91 @@ namespace OpenFileByName
 
 		public int OnAfterBackgroundSolutionLoadComplete()
 		{
-			OpenFileCustomCommand.ProjectFilenames = null;
-			OpenFileCustomCommand.bIsUpdatingSolutionFiles = false;
+			OpenFileCustomCommand.bForceUpdate = true;
+
+			return VSConstants.S_OK;
+		}
+		// IVsSolutionLoadEvents interface end
+
+
+		// IVsTrackProjectDocumentsEvents2 inteface begin
+		public int OnQueryAddFiles(IVsProject pProject, int cFiles, string[] rgpszMkDocuments, VSQUERYADDFILEFLAGS[] rgFlags, VSQUERYADDFILERESULTS[] pSummaryResult, VSQUERYADDFILERESULTS[] rgResults)
+		{
+			return VSConstants.S_OK;
+		}
+
+		public int OnAfterAddFilesEx(int cProjects, int cFiles, IVsProject[] rgpProjects, int[] rgFirstIndices, string[] rgpszMkDocuments, VSADDFILEFLAGS[] rgFlags)
+		{
+			OpenFileCustomCommand.bForceUpdate = true;
 
 			return VSConstants.S_OK;
 		}
 
-
-		/// <summary>
-		/// Initialization of the package; this method is called right after the package is sited, so this is the place
-		/// where you can put all the initialization code that rely on services provided by VisualStudio.
-		/// </summary>
-		protected override void Initialize()
+		public int OnAfterAddDirectoriesEx(int cProjects, int cDirectories, IVsProject[] rgpProjects, int[] rgFirstIndices, string[] rgpszMkDocuments, VSADDDIRECTORYFLAGS[] rgFlags)
 		{
-			OpenFileCustomCommand.Initialize(this);
-			base.Initialize();
+			OpenFileCustomCommand.bForceUpdate = true;
 
-			UnadviseSolutionEvents();
-			AdviseSolutionEvents();
-
-			DTE2 dte2 = Package.GetGlobalService(typeof(DTE)) as DTE2;
-
-			// set up listeners for solution modified events
-			solutionEvents = dte2.Events.SolutionEvents;
-			solutionEvents.ProjectAdded += SolutionEvents_ProjectAdded;
-			solutionEvents.ProjectRemoved += SolutionEvents_ProjectRemoved;
-			solutionEvents.ProjectRenamed += SolutionEvents_ProjectRenamed;
-
-			// set up listeners for project modified events
-			projectItemsEvents = ((Events2)dte2.Events).ProjectItemsEvents;
-			projectItemsEvents.ItemAdded += ProjectItemsEvents_ItemAdded;
-			projectItemsEvents.ItemRemoved += ProjectItemsEvents_ItemRemoved;
-			projectItemsEvents.ItemRenamed += ProjectItemsEvents_ItemRenamed;
+			return VSConstants.S_OK;
 		}
 
-
-		/// <summary>
-		/// Override of Package.Dispose() function from Microsoft.VisualStudio.Shell
-		/// </summary>
-		/// <param name="disposing">
-		/// Bool Value: True if the object is being disposed, false if it is being finalized.
-		/// </param>
-		protected override void Dispose(bool disposing)
+		public int OnAfterRemoveFiles(int cProjects, int cFiles, IVsProject[] rgpProjects, int[] rgFirstIndices, string[] rgpszMkDocuments, VSREMOVEFILEFLAGS[] rgFlags)
 		{
-			UnadviseSolutionEvents();
+			OpenFileCustomCommand.bForceUpdate = true;
 
-			base.Dispose(disposing);
+			return VSConstants.S_OK;
 		}
 
-		private void AdviseSolutionEvents()
+		public int OnAfterRemoveDirectories(int cProjects, int cDirectories, IVsProject[] rgpProjects, int[] rgFirstIndices, string[] rgpszMkDocuments, VSREMOVEDIRECTORYFLAGS[] rgFlags)
 		{
-			// Get solution
-			solution = ServiceProvider.GlobalProvider.GetService(typeof(SVsSolution)) as IVsSolution2;
-			if (solution != null)
-			{
-				// Register for solution events
-				solution.AdviseSolutionEvents(this, out solutionEventsCookie);
-			}
+			OpenFileCustomCommand.bForceUpdate = true;
+
+			return VSConstants.S_OK;
 		}
 
-		private void UnadviseSolutionEvents()
+		public int OnQueryRenameFiles(IVsProject pProject, int cFiles, string[] rgszMkOldNames, string[] rgszMkNewNames, VSQUERYRENAMEFILEFLAGS[] rgFlags, VSQUERYRENAMEFILERESULTS[] pSummaryResult, VSQUERYRENAMEFILERESULTS[] rgResults)
 		{
-			// Unadvise all events
-			if (solution != null && solutionEventsCookie != 0)
-			{
-				solution.UnadviseSolutionEvents(solutionEventsCookie);
-			}
+			return VSConstants.S_OK;
 		}
 
-		private void SolutionEvents_ProjectAdded(Project project)
+		public int OnAfterRenameFiles(int cProjects, int cFiles, IVsProject[] rgpProjects, int[] rgFirstIndices, string[] rgszMkOldNames, string[] rgszMkNewNames, VSRENAMEFILEFLAGS[] rgFlags)
 		{
-			lock (OpenFileCustomCommand.ProjectFilenamesLock)
-			{
-				try
-				{
-					// add the new project to the project filenames list
-					OpenFileCustomCommand.ProjectFileNameData projectFilename = new OpenFileCustomCommand.ProjectFileNameData(project);
-					OpenFileCustomCommand.ProjectFilenames.Add(projectFilename);
-				}
-				catch
-				{
-				}
-			}
+			OpenFileCustomCommand.bForceUpdate = true;
+
+			return VSConstants.S_OK;
 		}
 
-		private void SolutionEvents_ProjectRemoved(Project project)
+		public int OnQueryRenameDirectories(IVsProject pProject, int cDirs, string[] rgszMkOldNames, string[] rgszMkNewNames, VSQUERYRENAMEDIRECTORYFLAGS[] rgFlags, VSQUERYRENAMEDIRECTORYRESULTS[] pSummaryResult, VSQUERYRENAMEDIRECTORYRESULTS[] rgResults)
 		{
-			lock (OpenFileCustomCommand.ProjectFilenamesLock)
-			{
-				try
-				{
-					// remove the project from the project filenames list
-					for (int index = 0; index < OpenFileCustomCommand.ProjectFilenames.Count; ++index)
-					{
-						if (OpenFileCustomCommand.ProjectFilenames[index].project.Name == project.Name)
-						{
-							OpenFileCustomCommand.ProjectFilenames.RemoveAt(index);
-						}
-					}
-				}
-				catch
-				{
-				}
-			}
+			return VSConstants.S_OK;
 		}
 
-		private void SolutionEvents_ProjectRenamed(Project project, string oldName)
+		public int OnAfterRenameDirectories(int cProjects, int cDirs, IVsProject[] rgpProjects, int[] rgFirstIndices, string[] rgszMkOldNames, string[] rgszMkNewNames, VSRENAMEDIRECTORYFLAGS[] rgFlags)
 		{
-			// WARNING!!! - This does NOT get called when a VC project is renamed (but does get called when a C# project is renamed)
+			OpenFileCustomCommand.bForceUpdate = true;
 
-			lock (OpenFileCustomCommand.ProjectFilenamesLock)
-			{
-				try
-				{
-					// rename the project in the profect filenames list
-					for (int index = 0; index < OpenFileCustomCommand.ProjectFilenames.Count; ++index)
-					{
-						if (OpenFileCustomCommand.ProjectFilenames[index].project.Name == oldName)
-						{
-							OpenFileCustomCommand.ProjectFilenames[index].project = project;
-						}
-					}
-				}
-				catch
-				{
-				}
-			}
+			return VSConstants.S_OK;
 		}
 
-		private void ProjectItemsEvents_ItemAdded(ProjectItem projectItem)
+		public int OnQueryAddDirectories(IVsProject pProject, int cDirectories, string[] rgpszMkDocuments, VSQUERYADDDIRECTORYFLAGS[] rgFlags, VSQUERYADDDIRECTORYRESULTS[] pSummaryResult, VSQUERYADDDIRECTORYRESULTS[] rgResults)
 		{
-			lock (OpenFileCustomCommand.ProjectFilenamesLock)
-			{
-				try
-				{
-					string projectName = projectItem.ContainingProject.Name;
-
-					if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
-					{
-						for (int projectIndex = 0; projectIndex < OpenFileCustomCommand.ProjectFilenames.Count; ++projectIndex)
-						{
-							if (OpenFileCustomCommand.ProjectFilenames[projectIndex].project.Name == projectName)
-							{
-								OpenFileCustomCommand.FilenameData filenameData = new OpenFileCustomCommand.FilenameData();
-								filenameData.name = projectItem.Name;
-								filenameData.filename = projectItem.get_FileNames(0);
-
-								OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.Add(filenameData);
-
-								break;
-							}
-						}
-					}
-				}
-				catch
-				{
-				}
-			}
+			return VSConstants.S_OK;
 		}
 
-		private void ProjectItemsEvents_ItemRemoved(ProjectItem projectItem)
+		public int OnQueryRemoveFiles(IVsProject pProject, int cFiles, string[] rgpszMkDocuments, VSQUERYREMOVEFILEFLAGS[] rgFlags, VSQUERYREMOVEFILERESULTS[] pSummaryResult, VSQUERYREMOVEFILERESULTS[] rgResults)
 		{
-			lock (OpenFileCustomCommand.ProjectFilenamesLock)
-			{
-				try
-				{
-					string projectName = projectItem.ContainingProject.Name;
-
-					if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
-					{
-						string projectItemFilename = projectItem.get_FileNames(0);
-						bool bDone = false;
-
-						for (int projectIndex = 0; !bDone && (projectIndex < OpenFileCustomCommand.ProjectFilenames.Count); ++projectIndex)
-						{
-							if (OpenFileCustomCommand.ProjectFilenames[projectIndex].project.Name == projectName)
-							{
-								for (int itemIndex = 0; !bDone && (itemIndex < OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.Count); ++itemIndex)
-								{
-									if (OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[itemIndex].filename == projectItemFilename)
-									{
-										OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.RemoveAt(itemIndex);
-										bDone = true;  // break out of both loops
-									}
-								}
-							}
-						}
-					}
-				}
-				catch
-				{
-				}
-			}
+			return VSConstants.S_OK;
 		}
 
-		private void ProjectItemsEvents_ItemRenamed(ProjectItem projectItem, string oldName)
+		public int OnQueryRemoveDirectories(IVsProject pProject, int cDirectories, string[] rgpszMkDocuments, VSQUERYREMOVEDIRECTORYFLAGS[] rgFlags, VSQUERYREMOVEDIRECTORYRESULTS[] pSummaryResult, VSQUERYREMOVEDIRECTORYRESULTS[] rgResults)
 		{
-			lock (OpenFileCustomCommand.ProjectFilenamesLock)
-			{
-				try
-				{
-					string projectName = projectItem.ContainingProject.Name;
-
-					if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
-					{
-						string projectItemFilename = projectItem.get_FileNames(0);
-						bool bDone = false;
-
-						for (int projectIndex = 0; !bDone && (projectIndex < OpenFileCustomCommand.ProjectFilenames.Count); ++projectIndex)
-						{
-							if (OpenFileCustomCommand.ProjectFilenames[projectIndex].project.Name == projectName)
-							{
-								for (int itemIndex = 0; !bDone && (itemIndex < OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames.Count); ++itemIndex)
-								{
-									if (OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[itemIndex].name == oldName)
-									{
-										OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[itemIndex].name = projectItem.Name;
-										OpenFileCustomCommand.ProjectFilenames[projectIndex].filenames[itemIndex].filename = projectItem.get_FileNames(0);
-
-										bDone = true;  // break out of both loops
-									}
-								}
-							}
-						}
-					}
-				}
-				catch
-				{
-				}
-			}
+			return VSConstants.S_OK;
 		}
+
+		public int OnAfterSccStatusChanged(int cProjects, int cFiles, IVsProject[] rgpProjects, int[] rgFirstIndices, string[] rgpszMkDocuments, uint[] rgdwSccStatus)
+		{
+			return VSConstants.S_OK;
+		}
+		// IVsTrackProjectDocumentsEvents2 inteface end
 
 		#endregion
 	}

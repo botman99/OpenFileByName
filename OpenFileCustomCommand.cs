@@ -7,11 +7,19 @@ using System.ComponentModel.Design;
 using System.Globalization;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Task = System.Threading.Tasks.Task;
 
+using Microsoft.VisualStudio;
+using System.Collections.Generic;
+using System.IO;
 using EnvDTE;
 using EnvDTE80;
-using System.Collections.Generic;
-using System.Windows.Forms;
+
+// Some useful docs:
+// https://docs.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.shell.interop.ivssolution2.getprojectfilesinsolution?view=visualstudiosdk-2019
+// https://docs.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.shell.interop.ivssolution.getprojectenum?view=visualstudiosdk-2019
+// https://docs.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.shell.interop.ivshierarchy?view=visualstudiosdk-2019
+// https://docs.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.shell.ivshierarchyitem?view=visualstudiosdk-2019
 
 namespace OpenFileByName
 {
@@ -20,6 +28,10 @@ namespace OpenFileByName
 		public static bool bSingleton = false;  // singleton to prevent opening multiple dialog boxes at once (since dialog box is no longer modal)
 		public static string input = "";
 	}
+
+	// NOTE: For IVsHierarchy node objects, the node (IVsHierarchyItem) 'itemid' has a limited lifetime and it is NOT safe to keep them and use then
+	// without using IVsHierarchy.AdviseHierarchyEvents to listen for changes.  See the remarks here:
+	// https://docs.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.shell.interop.ivshierarchy?view=visualstudiosdk-2019
 
 	/// <summary>
 	/// Command handler
@@ -39,57 +51,43 @@ namespace OpenFileByName
 		/// <summary>
 		/// VS Package that provides this command, not null.
 		/// </summary>
-		private readonly Package package;
-
+		private readonly AsyncPackage package;
 
 		public class FilenameData
 		{
-			public string name;
-			public string filename;
+			public string Name = "";
+			public string Pathname = "";
 		}
 
 		public class ProjectFileNameData
 		{
-			// we need to use actual Project and not "Project.Name" string here, so that when we display the Project in the FindFile Dialog it will be
-			// the correct project name even after the project is renamed (ProjectRenamed event doesn't get called for VC projects)
-			public Project project;
-			public List<FilenameData> filenames;
-
-			public ProjectFileNameData(Project in_project)
-			{
-				project = in_project;
-
-				filenames = new List<FilenameData>();
-				filenames.AddRange(GetProjectFilenames(project));
-			}
+			public string ProjectPathName = "";  // "Project/folder/folder/folder"
+			public string WindowsPathName = "";  // ProjectPathName with backslashes instead of forward slashes
+			public List<FilenameData> Filenames = new List<FilenameData>();
 		}
 
 		public static List<ProjectFileNameData> ProjectFilenames = null;
 		public static Object ProjectFilenamesLock = new object();
 
-		public static bool bIsUpdatingSolutionFiles = false;
+		public static char[] InvalidChars;
+
+		public static bool bForceUpdate = false;  // set when files or projects in the solution are added, removed, or moved.
+
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="OpenFileCustomCommand"/> class.
 		/// Adds our command handlers for menu (commands must exist in the command table file)
 		/// </summary>
 		/// <param name="package">Owner package, not null.</param>
-		private OpenFileCustomCommand(Package package)
+		/// <param name="commandService">Command service to add command to, not null.</param>
+		private OpenFileCustomCommand(AsyncPackage package, OleMenuCommandService commandService)
 		{
-			if (package == null)
-			{
-				throw new ArgumentNullException("package");
-			}
+			this.package = package ?? throw new ArgumentNullException(nameof(package));
+			commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
 
-			this.package = package;
-
-			OleMenuCommandService commandService = this.ServiceProvider.GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
-			if (commandService != null)
-			{
-				var menuCommandID = new CommandID(CommandSet,CommandId);
-				var menuItem = new MenuCommand(this.Execute,menuCommandID);
-				commandService.AddCommand(menuItem);
-			}
+			var menuCommandID = new CommandID(CommandSet, CommandId);
+			var menuItem = new MenuCommand(this.Execute, menuCommandID);
+			commandService.AddCommand(menuItem);
 		}
 
 		/// <summary>
@@ -104,7 +102,7 @@ namespace OpenFileByName
 		/// <summary>
 		/// Gets the service provider from the owner package.
 		/// </summary>
-		private IServiceProvider ServiceProvider
+		private Microsoft.VisualStudio.Shell.IAsyncServiceProvider ServiceProvider
 		{
 			get
 			{
@@ -116,9 +114,14 @@ namespace OpenFileByName
 		/// Initializes the singleton instance of the command.
 		/// </summary>
 		/// <param name="package">Owner package, not null.</param>
-		public static void Initialize(Package package)
+		public static async Task InitializeAsync(AsyncPackage package)
 		{
-			Instance = new OpenFileCustomCommand(package);
+			// Switch to the main thread - the call to AddCommand in OpenFileCustomCommand's constructor requires
+			// the UI thread.
+			await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
+
+			OleMenuCommandService commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
+			Instance = new OpenFileCustomCommand(package, commandService);
 		}
 
 		/// <summary>
@@ -128,156 +131,239 @@ namespace OpenFileByName
 		/// </summary>
 		/// <param name="sender">Event sender.</param>
 		/// <param name="e">Event args.</param>
-		private void Execute(object sender,EventArgs e)
+		private void Execute(object sender, EventArgs e)
 		{
-			if (Globals.bSingleton)
+			ThreadHelper.ThrowIfNotOnUIThread();
+
+			try
 			{
-				return;
-			}
-
-			if (bIsUpdatingSolutionFiles)
-			{
-				string message = string.Format(CultureInfo.CurrentCulture, "Solution files are being processed, please wait.", this.GetType().FullName);
-				string title = "Open File By Name";
-
-				VsShellUtilities.ShowMessageBox(this.ServiceProvider, message, title,
-					OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-
-				return;
-			}
-
-			if (ProjectFilenames == null)
-			{
-				lock (ProjectFilenamesLock)
+				if (Globals.bSingleton)
 				{
-					try
+					return;
+				}
+
+				InvalidChars = Path.GetInvalidPathChars();  // get characters not allowed in file paths
+
+				if ((ProjectFilenames == null) || bForceUpdate)
+				{
+					lock (ProjectFilenamesLock)
 					{
-						DTE2 dte2 = Package.GetGlobalService(typeof(DTE)) as DTE2;
-						if (dte2 != null)
+						try
 						{
 							ProjectFilenames = new List<ProjectFileNameData>();
 
-							Solution solution = dte2.Solution;
+							IVsSolution2 solution = Package.GetGlobalService(typeof(SVsSolution)) as IVsSolution2;
 
-							foreach (Project project in solution.Projects)
+							IVsHierarchy solutionHierarchy = (IVsHierarchy)solution;
+
+							IVsProject Project = null;
+							ProjectFileNameData ProjectFileNameData = null;
+
+							GetFilesInSolutionRecursive(solutionHierarchy, VSConstants.VSITEMID_ROOT, "", ref Project, ref ProjectFileNameData);
+						}
+						catch
+						{
+						}
+
+						/* For Debugging Purposes
+						StreamWriter projectsFile = new StreamWriter("D:\\Projects.txt");
+						foreach (ProjectFileNameData projectFileNameData in ProjectFilenames)
+						{
+							projectsFile.WriteLine(projectFileNameData.ProjectPathName);
+						}
+						projectsFile.Close();
+
+						StreamWriter projectsFilenamesFile = new StreamWriter("D:\\ProjectsFiles.txt");
+						foreach (ProjectFileNameData projectFileNameData in ProjectFilenames)
+						{
+							foreach(FilenameData filenameData in projectFileNameData.Filenames)
 							{
-								// add each project to the project filenames list
-								ProjectFileNameData projectFilename = new ProjectFileNameData(project);
-								ProjectFilenames.Add(projectFilename);
+								projectsFilenamesFile.WriteLine("{0}, {1}", projectFileNameData.ProjectPathName, filenameData.Pathname);
+							}
+						}
+						projectsFilenamesFile.Close();
+						*/
+					}
+				}
+
+				try
+				{
+					if (Properties.Settings.Default.UseSelectedText)
+					{
+						DTE2 dte2 = Package.GetGlobalService(typeof(DTE)) as DTE2;
+						if ((dte2 != null) && (dte2.ActiveDocument != null))
+						{
+							TextSelection selection = dte2.ActiveDocument.Selection as TextSelection;
+
+							if ((selection != null) && (selection.Text != "") && (selection.Text.Length < 260))  // 260 is MAX_PATH
+							{
+								Globals.input = selection.Text;
 							}
 						}
 					}
-					catch
-					{
-					}
 				}
-			}
-
-
-			if (Properties.Settings.Default.UseSelectedText)
-			{
-				DTE2 dte2 = Package.GetGlobalService(typeof(DTE)) as DTE2;
-				if (dte2.ActiveDocument != null)
+				catch
 				{
-					TextSelection selection = dte2.ActiveDocument.Selection as TextSelection;
-
-					if ((selection != null) && (selection.Text != "") && (selection.Text.Length < 260))  // 260 is MAX_PATH
-					{
-						Globals.input = selection.Text;
-					}
 				}
+
+				OpenFileDialog openFileDialog = new OpenFileByName.OpenFileDialog(Globals.input);
+
+				Globals.bSingleton = true;
+
+				openFileDialog.Show();  // don't use a modal dialog so we can set focus to opened documents
 			}
-
-			OpenFileDialog openFileDialog = new OpenFileByName.OpenFileDialog(Globals.input);
-
-			Globals.bSingleton = true;
-			openFileDialog.Show();  // don't use a modal dialog so we can set focus to opened documents
+			catch (Exception ex)
+			{
+				Console.WriteLine("Execute Exception: {0}", ex.Message);
+			}
 		}
 
 
-		public static IEnumerable<FilenameData> GetProjectItemFilenames(ProjectItem projectItem)
+		private void GetFilesInSolutionRecursive(IVsHierarchy hierarchy, uint itemId, string ProjectName, ref IVsProject Project, ref ProjectFileNameData ProjectFileNameData)
 		{
-			List<FilenameData> list = new List<FilenameData>();
-
-			if (projectItem == null)
-			{
-				return list;
-			}
+			ThreadHelper.ThrowIfNotOnUIThread();
 
 			try
 			{
-				if (projectItem.SubProject != null)  // i.e. Kind == vsProjectItemKindSubProject
+				// NOTE: If itemId == VSConstants.VSITEMID_ROOT then this hierarchy is a solution, project, or folder in the Solution Explorer
+
+				if (hierarchy == null)
 				{
-					list.AddRange(GetProjectFilenames(projectItem.SubProject));
+					return;
 				}
-				else if ((projectItem.ProjectItems != null) && (projectItem.ProjectItems.Count != 0))  // i.e. Kind == vsProjectItemKindVirtualFolder
+
+				object ChildObject = null;
+
+				// Get the first visible child node
+				if (hierarchy.GetProperty(itemId, (int)__VSHPROPID.VSHPROPID_FirstVisibleChild, out ChildObject) == VSConstants.S_OK)
 				{
-					foreach (ProjectItem childProjectItem in projectItem.ProjectItems)
+					while (ChildObject != null)
 					{
-						list.AddRange(GetProjectItemFilenames(childProjectItem));
-					}
-				}
-				else if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
-				{
-					if ((!projectItem.Name.EndsWith(".vcxproj.filters")) &&
-						(!projectItem.Name.EndsWith(".vcxproj.user")) &&
-						(!projectItem.Name.EndsWith(".csproj.user")))
-					{
-						FilenameData filenameData = new FilenameData();
-						filenameData.name = projectItem.Name;
-						filenameData.filename = projectItem.get_FileNames(0);
-
-						list.Add(filenameData);
-					}
-				}
-			}
-			catch
-			{
-			}
-
-			return list;
-		}
-
-		public static IEnumerable<FilenameData> GetProjectFilenames(Project project)
-		{
-			List<FilenameData> list = new List<FilenameData>();
-
-			if (project == null)
-			{
-				return list;
-			}
-
-			try
-			{
-				foreach (ProjectItem projectItem in project.ProjectItems)
-				{
-					if (projectItem != null)
-					{
-						if (projectItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFile)
+						if ((ChildObject is int) && ((uint)(int)ChildObject == VSConstants.VSITEMID_NIL))
 						{
-							if ((!projectItem.Name.EndsWith(".vcxproj.filters")) &&
-								(!projectItem.Name.EndsWith(".vcxproj.user")) &&
-								(!projectItem.Name.EndsWith(".csproj.user")))
-							{
-								FilenameData filenameData = new FilenameData();
-								filenameData.name = projectItem.Name;
-								filenameData.filename = projectItem.get_FileNames(0);
+							break;
+						}
 
-								list.Add(filenameData);
+						uint visibleChildNodeId = Convert.ToUInt32(ChildObject);
+
+						Guid nestedHierarchyGuid = typeof(IVsHierarchy).GUID;
+						IntPtr nestedHiearchyValue = IntPtr.Zero;
+						uint nestedItemIdValue = 0;
+
+						// see if the child node has a nested hierarchy (i.e. is it a project?, is it a folder?, etc.)...
+						if ((hierarchy.GetNestedHierarchy(visibleChildNodeId, ref nestedHierarchyGuid, out nestedHiearchyValue, out nestedItemIdValue) == VSConstants.S_OK) &&
+							(nestedHiearchyValue != IntPtr.Zero && nestedItemIdValue == VSConstants.VSITEMID_ROOT))
+						{
+							// Get the new hierarchy
+							IVsHierarchy nestedHierarchy = System.Runtime.InteropServices.Marshal.GetObjectForIUnknown(nestedHiearchyValue) as IVsHierarchy;
+							System.Runtime.InteropServices.Marshal.Release(nestedHiearchyValue);
+
+							if (nestedHierarchy != null)
+							{
+								IVsProject NewProject = null;
+								string NewProjectName = "";
+
+								NewProject = (IVsProject)nestedHierarchy;
+								if (NewProject != null)
+								{
+									object nameObject = null;
+
+									if ((nestedHierarchy.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_Name, out nameObject) == VSConstants.S_OK) && (nameObject != null))
+									{
+										NewProjectName = (string)nameObject;
+
+										if ((NewProjectName != null) && (NewProjectName.Length > 0))
+										{
+											if ((ProjectName == null) || (ProjectName.Length == 0))
+											{
+												ProjectName = NewProjectName;
+											}
+											else
+											{
+												ProjectName = String.Format("{0}\\{1}", ProjectName, NewProjectName);  // add the new project to the project path string
+											}
+										}
+									}
+
+									// create the new ProjectFileNameData record...
+									ProjectFileNameData NewProjectFileNameData = new ProjectFileNameData();
+
+									NewProjectFileNameData.WindowsPathName = ProjectName;
+									NewProjectFileNameData.ProjectPathName = ProjectName.Replace("\\", "/");
+
+									// recurse into the new nested hierarchy to handle children...
+									GetFilesInSolutionRecursive(nestedHierarchy, VSConstants.VSITEMID_ROOT, ProjectName, ref NewProject, ref NewProjectFileNameData);
+
+									if ((NewProjectName != null) && (NewProjectName.Length > 0) &&
+										(ProjectName.IndexOfAny(InvalidChars) == -1))
+									{
+										ProjectName = Path.GetDirectoryName(ProjectName);  // strip off the trailing "directory" from the project path string
+									}
+
+									if (NewProjectFileNameData.Filenames.Count > 0)
+									{
+										ProjectFilenames.Add(NewProjectFileNameData);
+									}
+								}
 							}
 						}
 						else
 						{
-							list.AddRange(GetProjectItemFilenames(projectItem));
+							string projectFilename = "";
+
+							try
+							{
+								if (Project.GetMkDocument(visibleChildNodeId, out projectFilename) == VSConstants.S_OK)
+								{
+									if ((projectFilename != null) && (projectFilename.Length > 0) &&
+										(!projectFilename.EndsWith("\\")) &&  // some invalid "filenames" will end with '\\'
+										(projectFilename.IndexOfAny(InvalidChars) == -1) &&
+//										(File.Exists(projectFilename)))  // File.Exists is too slow for very large projects (thousands of files)
+										(projectFilename.IndexOf(":", StringComparison.OrdinalIgnoreCase) == 1))  // make sure filename is of the form: drive letter followed by colon
+									{
+										FilenameData CurrentFilenameData = new FilenameData();
+										CurrentFilenameData.Pathname = projectFilename;
+										CurrentFilenameData.Name = Path.GetFileName(projectFilename);
+
+										ProjectFileNameData.Filenames.Add(CurrentFilenameData);
+									}
+								}
+							}
+							catch (Exception ex)
+							{
+								Console.WriteLine("Exception: {0}", ex.Message);
+							}
+
+							object NodeChildObject = null;
+
+							// see if this regular node has children...
+							if (hierarchy.GetProperty(visibleChildNodeId, (int)__VSHPROPID.VSHPROPID_FirstVisibleChild, out NodeChildObject) == VSConstants.S_OK)
+							{
+								if (NodeChildObject != null)
+								{
+									if ((NodeChildObject is int) && ((uint)(int)NodeChildObject != VSConstants.VSITEMID_NIL))
+									{
+										// recurse into the regular node to handle children...
+										GetFilesInSolutionRecursive(hierarchy, visibleChildNodeId, ProjectName, ref Project, ref ProjectFileNameData);
+									}
+								}
+							}
+						}
+
+						ChildObject = null;
+
+						// Get the next visible sibling node
+						if (hierarchy.GetProperty(visibleChildNodeId, (int)__VSHPROPID.VSHPROPID_NextVisibleSibling, out ChildObject) != VSConstants.S_OK)
+						{
+							break;
 						}
 					}
 				}
 			}
-			catch
+			catch (Exception ex)
 			{
+				Console.WriteLine("Exception: {0}", ex.Message);
 			}
-
-			return list;
 		}
 
 	}
