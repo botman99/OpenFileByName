@@ -31,7 +31,7 @@ namespace OpenFileByName
 		private int auto_save_top = -1;
 
 		private ListViewColumnSorter columnSorter;
-		private const int NumColumns = 3;
+		private const int NumColumns = 2;
 		private int[] ColumnWidthSize;  // store the ListView column width size so we can tell if they have actually changed
 
 		public string input;
@@ -79,7 +79,6 @@ namespace OpenFileByName
 			{
 				FileListView.Columns[0].Width = Properties.Settings.Default.ListViewColumnWidth0;
 				FileListView.Columns[1].Width = Properties.Settings.Default.ListViewColumnWidth1;
-				FileListView.Columns[2].Width = Properties.Settings.Default.ListViewColumnWidth2;
 			}
 
 			for( int column_index = 0; column_index < NumColumns; column_index++ )
@@ -208,7 +207,7 @@ namespace OpenFileByName
 
 			items = new List<ListViewItem>();
 
-			if ((OpenFileCustomCommand.ProjectFilenames != null) && (OpenFileCustomCommand.ProjectFilenames.Count > 0))
+			if ((OpenFileCustomCommand.SolutionFilenames != null) && (OpenFileCustomCommand.SolutionFilenames.Count > 0))
 			{
 				if (WorkerThread != null)  // if there's already a worker thread running, kill it
 				{
@@ -302,11 +301,11 @@ namespace OpenFileByName
 					{
 						foreach (ListViewItem item in FileListView.SelectedItems)
 						{
-							if (item.SubItems[2].Text != "")
+							if (item.SubItems[1].Text != "")
 							{
-								if (System.IO.File.Exists(item.SubItems[2].Text))
+								if (System.IO.File.Exists(item.SubItems[1].Text))
 								{
-									dte.ItemOperations.OpenFile(item.SubItems[2].Text);
+									dte.ItemOperations.OpenFile(item.SubItems[1].Text);
 									dte.ActiveDocument.Activate();  // set focus on the document
 									dte.ActiveDocument.ActiveWindow.Activate();  // set focus on the document's window
 
@@ -349,11 +348,11 @@ namespace OpenFileByName
 
 					if (dte != null)
 					{
-						if (item.SubItems[2].Text != "")
+						if (item.SubItems[1].Text != "")
 						{
-							if (System.IO.File.Exists(item.SubItems[2].Text))
+							if (System.IO.File.Exists(item.SubItems[1].Text))
 							{
-								dte.ItemOperations.OpenFile(item.SubItems[2].Text);
+								dte.ItemOperations.OpenFile(item.SubItems[1].Text);
 								dte.ActiveDocument.Activate();  // set focus on the document
 								dte.ActiveDocument.ActiveWindow.Activate();  // set focus on the document's window
 
@@ -408,7 +407,6 @@ namespace OpenFileByName
 				{
 					Properties.Settings.Default.ListViewColumnWidth0 = FileListView.Columns[0].Width;
 					Properties.Settings.Default.ListViewColumnWidth1 = FileListView.Columns[1].Width;
-					Properties.Settings.Default.ListViewColumnWidth2 = FileListView.Columns[2].Width;
 					Properties.Settings.Default.Save();
 				}
 
@@ -421,11 +419,11 @@ namespace OpenFileByName
 			if (bWindowInitComplete)
 			{
 				// auto size the last column to the width of the list view client area minus the width of the other two columns
-				int width = FileListView.ClientSize.Width - (FileListView.Columns[0].Width + FileListView.Columns[1].Width);
+				int width = FileListView.ClientSize.Width - FileListView.Columns[0].Width;
 
-				if (width > FileListView.Columns[2].Width)  // only adjust the width if the last column isn't already wide enough
+				if (width > FileListView.Columns[NumColumns-1].Width)  // only adjust the width if the last column isn't already wide enough
 				{
-					FileListView.Columns[2].Width = width;
+					FileListView.Columns[NumColumns-1].Width = width;
 				}
 			}
 		}

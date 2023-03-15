@@ -31,7 +31,6 @@
 			this.panel1 = new System.Windows.Forms.Panel();
 			this.FileListView = new System.Windows.Forms.ListView();
 			this.File = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-			this.Project = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
 			this.Path = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
 			this.panel2 = new System.Windows.Forms.Panel();
 			this.Options_Button = new System.Windows.Forms.Button();
@@ -49,8 +48,9 @@
 			this.panel1.Controls.Add(this.FileListView);
 			this.panel1.Dock = System.Windows.Forms.DockStyle.Fill;
 			this.panel1.Location = new System.Drawing.Point(0, 0);
+			this.panel1.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
 			this.panel1.Name = "panel1";
-			this.panel1.Size = new System.Drawing.Size(1019, 287);
+			this.panel1.Size = new System.Drawing.Size(764, 233);
 			this.panel1.TabIndex = 4;
 			// 
 			// FileListView
@@ -60,14 +60,14 @@
             | System.Windows.Forms.AnchorStyles.Right)));
 			this.FileListView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
             this.File,
-            this.Project,
             this.Path});
 			this.FileListView.FullRowSelect = true;
 			this.FileListView.GridLines = true;
 			this.FileListView.HideSelection = false;
 			this.FileListView.Location = new System.Drawing.Point(0, 0);
+			this.FileListView.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
 			this.FileListView.Name = "FileListView";
-			this.FileListView.Size = new System.Drawing.Size(1017, 286);
+			this.FileListView.Size = new System.Drawing.Size(764, 233);
 			this.FileListView.TabIndex = 0;
 			this.FileListView.UseCompatibleStateImageBehavior = false;
 			this.FileListView.View = System.Windows.Forms.View.Details;
@@ -79,11 +79,6 @@
 			// 
 			this.File.Text = "File";
 			this.File.Width = 200;
-			// 
-			// Project
-			// 
-			this.Project.Text = "Project or Folder";
-			this.Project.Width = 100;
 			// 
 			// Path
 			// 
@@ -98,9 +93,10 @@
 			this.panel2.Controls.Add(this.OK_Button);
 			this.panel2.Controls.Add(this.Cancel_Button);
 			this.panel2.Dock = System.Windows.Forms.DockStyle.Bottom;
-			this.panel2.Location = new System.Drawing.Point(0, 287);
+			this.panel2.Location = new System.Drawing.Point(0, 233);
+			this.panel2.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
 			this.panel2.Name = "panel2";
-			this.panel2.Size = new System.Drawing.Size(1019, 133);
+			this.panel2.Size = new System.Drawing.Size(764, 108);
 			this.panel2.TabIndex = 5;
 			this.panel2.Move += new System.EventHandler(this.OpenFileDialog_Move);
 			this.panel2.Resize += new System.EventHandler(this.OpenFileDialog_Resize);
@@ -108,9 +104,10 @@
 			// Options_Button
 			// 
 			this.Options_Button.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-			this.Options_Button.Location = new System.Drawing.Point(897, 80);
+			this.Options_Button.Location = new System.Drawing.Point(673, 65);
+			this.Options_Button.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
 			this.Options_Button.Name = "Options_Button";
-			this.Options_Button.Size = new System.Drawing.Size(105, 38);
+			this.Options_Button.Size = new System.Drawing.Size(79, 31);
 			this.Options_Button.TabIndex = 4;
 			this.Options_Button.Text = "Options";
 			this.Options_Button.UseVisualStyleBackColor = true;
@@ -119,9 +116,10 @@
 			// pictureBox1
 			// 
 			this.pictureBox1.Anchor = System.Windows.Forms.AnchorStyles.Top;
-			this.pictureBox1.Location = new System.Drawing.Point(891, 9);
+			this.pictureBox1.Location = new System.Drawing.Point(668, 7);
+			this.pictureBox1.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
 			this.pictureBox1.Name = "pictureBox1";
-			this.pictureBox1.Size = new System.Drawing.Size(32, 30);
+			this.pictureBox1.Size = new System.Drawing.Size(24, 24);
 			this.pictureBox1.TabIndex = 3;
 			this.pictureBox1.TabStop = false;
 			// 
@@ -130,20 +128,22 @@
 			this.FileComboBox.Anchor = System.Windows.Forms.AnchorStyles.Top;
 			this.FileComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.Simple;
 			this.FileComboBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 7.8F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-			this.FileComboBox.ItemHeight = 16;
-			this.FileComboBox.Location = new System.Drawing.Point(149, 9);
+			this.FileComboBox.ItemHeight = 13;
+			this.FileComboBox.Location = new System.Drawing.Point(112, 7);
+			this.FileComboBox.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
 			this.FileComboBox.MaxDropDownItems = 1;
 			this.FileComboBox.Name = "FileComboBox";
-			this.FileComboBox.Size = new System.Drawing.Size(719, 24);
+			this.FileComboBox.Size = new System.Drawing.Size(540, 20);
 			this.FileComboBox.TabIndex = 0;
 			this.FileComboBox.TextChanged += new System.EventHandler(this.FileComboBox_TextChanged);
 			// 
 			// OK_Button
 			// 
 			this.OK_Button.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
-			this.OK_Button.Location = new System.Drawing.Point(380, 80);
+			this.OK_Button.Location = new System.Drawing.Point(285, 65);
+			this.OK_Button.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
 			this.OK_Button.Name = "OK_Button";
-			this.OK_Button.Size = new System.Drawing.Size(105, 38);
+			this.OK_Button.Size = new System.Drawing.Size(79, 31);
 			this.OK_Button.TabIndex = 1;
 			this.OK_Button.Text = "OK";
 			this.OK_Button.UseVisualStyleBackColor = true;
@@ -152,9 +152,10 @@
 			// Cancel_Button
 			// 
 			this.Cancel_Button.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
-			this.Cancel_Button.Location = new System.Drawing.Point(533, 80);
+			this.Cancel_Button.Location = new System.Drawing.Point(400, 65);
+			this.Cancel_Button.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
 			this.Cancel_Button.Name = "Cancel_Button";
-			this.Cancel_Button.Size = new System.Drawing.Size(105, 38);
+			this.Cancel_Button.Size = new System.Drawing.Size(79, 31);
 			this.Cancel_Button.TabIndex = 2;
 			this.Cancel_Button.Text = "Cancel";
 			this.Cancel_Button.UseVisualStyleBackColor = true;
@@ -162,13 +163,14 @@
 			// 
 			// OpenFileDialog
 			// 
-			this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
+			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-			this.ClientSize = new System.Drawing.Size(1019, 420);
+			this.ClientSize = new System.Drawing.Size(764, 341);
 			this.Controls.Add(this.panel1);
 			this.Controls.Add(this.panel2);
 			this.KeyPreview = true;
-			this.MinimumSize = new System.Drawing.Size(901, 297);
+			this.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+			this.MinimumSize = new System.Drawing.Size(680, 249);
 			this.Name = "OpenFileDialog";
 			this.Text = "Open File By Name";
 			this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.OpenFileDialog_FormClosing);
@@ -188,7 +190,6 @@
 
 		private System.Windows.Forms.ListView FileListView;
 		private System.Windows.Forms.ColumnHeader File;
-		private System.Windows.Forms.ColumnHeader Project;
 		private System.Windows.Forms.ColumnHeader Path;
 		private System.Windows.Forms.Button OK_Button;
 		private System.Windows.Forms.Button Cancel_Button;

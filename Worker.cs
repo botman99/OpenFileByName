@@ -3,8 +3,9 @@
 //
 
 using System;
-
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace OpenFileByName
@@ -28,25 +29,17 @@ namespace OpenFileByName
 		{
 			try
 			{
-				for (int projectIndex = 0; projectIndex < OpenFileCustomCommand.ProjectFilenames.Count; ++projectIndex)
+				foreach(string FilePath in OpenFileCustomCommand.SolutionFilenames)
 				{
-					try
-					{
-						for( int filenameIndex = 0; filenameIndex < OpenFileCustomCommand.ProjectFilenames[projectIndex].Filenames.Count; ++filenameIndex)
-						{
-							if ((Input == "") || OpenFileCustomCommand.ProjectFilenames[projectIndex].Filenames[filenameIndex].Name.IndexOf(Input, StringComparison.CurrentCultureIgnoreCase) >= 0)
-							{
-								ListViewItem item = new ListViewItem(OpenFileCustomCommand.ProjectFilenames[projectIndex].Filenames[filenameIndex].Name);
+					string FileName = Path.GetFileName(FilePath);
 
-								item.SubItems.Add(OpenFileCustomCommand.ProjectFilenames[projectIndex].ProjectPathName);
-								item.SubItems.Add(OpenFileCustomCommand.ProjectFilenames[projectIndex].Filenames[filenameIndex].Pathname);
-
-								OpenFileDialog.items.Add(item);
-							}
-						}
-					}
-					catch
+					if ((Input == "") || FileName.IndexOf(Input, StringComparison.CurrentCultureIgnoreCase) >= 0)
 					{
+						ListViewItem item = new ListViewItem(FileName);
+
+						item.SubItems.Add(FilePath);
+
+						OpenFileDialog.items.Add(item);
 					}
 				}
 			}

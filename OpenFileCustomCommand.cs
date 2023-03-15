@@ -53,21 +53,7 @@ namespace OpenFileByName
 		/// </summary>
 		private readonly AsyncPackage package;
 
-		public class FilenameData
-		{
-			public string Name = "";
-			public string Pathname = "";
-		}
-
-		public class ProjectFileNameData
-		{
-			public string ProjectPathName = "";  // "Project/folder/folder/folder"
-			public string WindowsPathName = "";  // ProjectPathName with backslashes instead of forward slashes
-			public List<FilenameData> Filenames = new List<FilenameData>();
-		}
-
-		public static List<ProjectFileNameData> ProjectFilenames = null;
-		public static Object ProjectFilenamesLock = new object();
+		public static HashSet<string> SolutionFilenames = null;
 
 		public static char[] InvalidChars;
 
@@ -144,45 +130,22 @@ namespace OpenFileByName
 
 				InvalidChars = Path.GetInvalidPathChars();  // get characters not allowed in file paths
 
-				if ((ProjectFilenames == null) || bForceUpdate)
+				if ((SolutionFilenames == null) || bForceUpdate)
 				{
-					lock (ProjectFilenamesLock)
+					try
 					{
-						try
-						{
-							ProjectFilenames = new List<ProjectFileNameData>();
+						SolutionFilenames = new HashSet<string>();
 
-							IVsSolution2 solution = Package.GetGlobalService(typeof(SVsSolution)) as IVsSolution2;
+						IVsSolution2 solution = Package.GetGlobalService(typeof(SVsSolution)) as IVsSolution2;
 
-							IVsHierarchy solutionHierarchy = (IVsHierarchy)solution;
+						IVsHierarchy solutionHierarchy = (IVsHierarchy)solution;
 
-							IVsProject Project = null;
-							ProjectFileNameData ProjectFileNameData = null;
+						IVsProject Project = null;
 
-							GetFilesInSolutionRecursive(solutionHierarchy, VSConstants.VSITEMID_ROOT, "", ref Project, ref ProjectFileNameData);
-						}
-						catch
-						{
-						}
-
-						/* For Debugging Purposes
-						StreamWriter projectsFile = new StreamWriter("D:\\Projects.txt");
-						foreach (ProjectFileNameData projectFileNameData in ProjectFilenames)
-						{
-							projectsFile.WriteLine(projectFileNameData.ProjectPathName);
-						}
-						projectsFile.Close();
-
-						StreamWriter projectsFilenamesFile = new StreamWriter("D:\\ProjectsFiles.txt");
-						foreach (ProjectFileNameData projectFileNameData in ProjectFilenames)
-						{
-							foreach(FilenameData filenameData in projectFileNameData.Filenames)
-							{
-								projectsFilenamesFile.WriteLine("{0}, {1}", projectFileNameData.ProjectPathName, filenameData.Pathname);
-							}
-						}
-						projectsFilenamesFile.Close();
-						*/
+						GetFilesInSolutionRecursive(solutionHierarchy, VSConstants.VSITEMID_ROOT, ref Project, ref SolutionFilenames);
+					}
+					catch
+					{
 					}
 				}
 
@@ -219,7 +182,7 @@ namespace OpenFileByName
 		}
 
 
-		private void GetFilesInSolutionRecursive(IVsHierarchy hierarchy, uint itemId, string ProjectName, ref IVsProject Project, ref ProjectFileNameData ProjectFileNameData)
+		private void GetFilesInSolutionRecursive(IVsHierarchy hierarchy, uint itemId, ref IVsProject Project, ref HashSet<string> SolutionFilenames)
 		{
 			ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -260,50 +223,11 @@ namespace OpenFileByName
 
 							if (nestedHierarchy != null)
 							{
-								IVsProject NewProject = null;
-								string NewProjectName = "";
-
-								NewProject = (IVsProject)nestedHierarchy;
+								IVsProject NewProject = (IVsProject)nestedHierarchy;
 								if (NewProject != null)
 								{
-									object nameObject = null;
-
-									if ((nestedHierarchy.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_Name, out nameObject) == VSConstants.S_OK) && (nameObject != null))
-									{
-										NewProjectName = (string)nameObject;
-
-										if ((NewProjectName != null) && (NewProjectName.Length > 0))
-										{
-											if ((ProjectName == null) || (ProjectName.Length == 0))
-											{
-												ProjectName = NewProjectName;
-											}
-											else
-											{
-												ProjectName = String.Format("{0}\\{1}", ProjectName, NewProjectName);  // add the new project to the project path string
-											}
-										}
-									}
-
-									// create the new ProjectFileNameData record...
-									ProjectFileNameData NewProjectFileNameData = new ProjectFileNameData();
-
-									NewProjectFileNameData.WindowsPathName = ProjectName;
-									NewProjectFileNameData.ProjectPathName = ProjectName.Replace("\\", "/");
-
 									// recurse into the new nested hierarchy to handle children...
-									GetFilesInSolutionRecursive(nestedHierarchy, VSConstants.VSITEMID_ROOT, ProjectName, ref NewProject, ref NewProjectFileNameData);
-
-									if ((NewProjectName != null) && (NewProjectName.Length > 0) &&
-										(ProjectName.IndexOfAny(InvalidChars) == -1))
-									{
-										ProjectName = Path.GetDirectoryName(ProjectName);  // strip off the trailing "directory" from the project path string
-									}
-
-									if (NewProjectFileNameData.Filenames.Count > 0)
-									{
-										ProjectFilenames.Add(NewProjectFileNameData);
-									}
+									GetFilesInSolutionRecursive(nestedHierarchy, VSConstants.VSITEMID_ROOT, ref NewProject, ref SolutionFilenames);
 								}
 							}
 						}
@@ -321,11 +245,7 @@ namespace OpenFileByName
 //										(File.Exists(projectFilename)))  // File.Exists is too slow for very large projects (thousands of files)
 										(projectFilename.IndexOf(":", StringComparison.OrdinalIgnoreCase) == 1))  // make sure filename is of the form: drive letter followed by colon
 									{
-										FilenameData CurrentFilenameData = new FilenameData();
-										CurrentFilenameData.Pathname = projectFilename;
-										CurrentFilenameData.Name = Path.GetFileName(projectFilename);
-
-										ProjectFileNameData.Filenames.Add(CurrentFilenameData);
+										SolutionFilenames.Add(projectFilename);
 									}
 								}
 							}
@@ -344,7 +264,7 @@ namespace OpenFileByName
 									if ((NodeChildObject is int) && ((uint)(int)NodeChildObject != VSConstants.VSITEMID_NIL))
 									{
 										// recurse into the regular node to handle children...
-										GetFilesInSolutionRecursive(hierarchy, visibleChildNodeId, ProjectName, ref Project, ref ProjectFileNameData);
+										GetFilesInSolutionRecursive(hierarchy, visibleChildNodeId, ref Project, ref SolutionFilenames);
 									}
 								}
 							}
